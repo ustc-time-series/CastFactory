@@ -62,6 +62,31 @@ class RecordsSplitsWindowsTests(unittest.TestCase):
         self.assertEqual(samples[0].future_unknown_window.values[:, 0].tolist(), [4, 5])
         self.assertEqual(samples[0].cutoff_time, record.timestamps[3])
 
+    def test_window_builder_splits_future_known_covariates(self):
+        from castfactory.data.records import TSRecord
+        from castfactory.data.windows import WindowBuilder
+
+        record = TSRecord(
+            values=np.column_stack([
+                np.arange(8, dtype=float),
+                np.arange(100, 108, dtype=float),
+            ]),
+            timestamps=pd.date_range("2022-01-01", periods=8, freq="h"),
+            channel_names=["load", "hour_of_day"],
+            target_channels=["load"],
+            covariate_channels=["hour_of_day"],
+            static_context={},
+            metadata={},
+        )
+
+        sample = WindowBuilder(context_length=4, prediction_length=2, stride=2).build(record)[0]
+
+        self.assertEqual(sample.future_unknown_window.channel_names, ["load"])
+        self.assertEqual(sample.future_unknown_window.values[:, 0].tolist(), [4.0, 5.0])
+        self.assertIsNotNone(sample.future_known_window)
+        self.assertEqual(sample.future_known_window.channel_names, ["hour_of_day"])
+        self.assertEqual(sample.future_known_window.values[:, 0].tolist(), [104.0, 105.0])
+
     def test_train_only_normalizer_reuses_train_statistics(self):
         from castfactory.data.transforms import TrainOnlyStandardScaler
 

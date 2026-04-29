@@ -16,6 +16,8 @@ class EvaluationResult:
 
 
 class StandardEvaluator:
+    protocol_name = "standard"
+
     def __init__(self, metrics: Iterable[str] = ("mae", "mse")):
         self.metric_names = list(metrics)
         unknown = [name for name in self.metric_names if name not in METRIC_REGISTRY]
@@ -61,3 +63,11 @@ class StandardEvaluator:
                         }
                     )
         return EvaluationResult(metrics=metrics, predictions=rows)
+
+
+class RollingEvaluator(StandardEvaluator):
+    protocol_name = "rolling"
+
+
+class ZeroShotEvaluator(StandardEvaluator):
+    protocol_name = "zero_shot"

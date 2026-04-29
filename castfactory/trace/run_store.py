@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Iterable, Mapping
 
+import pandas as pd
+
 
 class RunStore:
     def __init__(self, root: str | Path = "runs", run_id: str = "default"):
@@ -37,6 +39,28 @@ class RunStore:
         for name in sorted(metrics):
             lines.append(f"- `{name}`: {metrics[name]}")
         return self._write_text("report.md", "\n".join(lines) + "\n")
+
+    def save_predictions(self, rows: Iterable[Mapping]) -> Path:
+        path = self.path / "predictions.parquet"
+        frame = pd.DataFrame([dict(row) for row in rows])
+        frame.to_parquet(path, index=False)
+        return path
+
+    def save_prompts(self, rows: Iterable[Mapping]) -> Path:
+        return self.write_jsonl("prompts.jsonl", rows)
+
+    def save_responses(self, rows: Iterable[Mapping]) -> Path:
+        return self.write_jsonl("responses.jsonl", rows)
+
+    def save_parsed(self, rows: Iterable[Mapping]) -> Path:
+        return self.write_jsonl("parsed.jsonl", rows)
+
+    def append_error(self, error: Mapping) -> Path:
+        path = self.path / "errors.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(dict(error), sort_keys=True) + "\n")
+        return path
 
     def _write_text(self, relative_path: str, text: str) -> Path:
         path = self.path / relative_path

@@ -92,6 +92,38 @@ def register_parser(name: str, target: Optional[Callable[..., T]] = None) -> Any
     return _register(parsers, name, target)
 
 
+def register_backbone(name: str, target: Optional[Callable[..., T]] = None) -> Any:
+    return _register(backbones, name, target)
+
+
+def register_bridge(name: str, target: Optional[Callable[..., T]] = None) -> Any:
+    return _register(bridges, name, target)
+
+
+def register_head(name: str, target: Optional[Callable[..., T]] = None) -> Any:
+    return _register(heads, name, target)
+
+
+def register_trainer(name: str, target: Optional[Callable[..., T]] = None) -> Any:
+    return _register(trainers, name, target)
+
+
+def register_metric(name: str, target: Optional[Callable[..., T]] = None) -> Any:
+    return _register(metrics, name, target)
+
+
+def register_reward(name: str, target: Optional[Callable[..., T]] = None) -> Any:
+    return _register(rewards, name, target)
+
+
+def register_objective(name: str, target: Optional[Callable[..., T]] = None) -> Any:
+    return _register(objectives, name, target)
+
+
+def register_protocol(name: str, target: Optional[Callable[..., T]] = None) -> Any:
+    return _register(protocols, name, target)
+
+
 def clear_all() -> None:
     for value in globals().values():
         if isinstance(value, Registry):

@@ -27,6 +27,13 @@ def rmse(pred, target, insample: Optional[np.ndarray] = None) -> float:
     return float(np.sqrt(mse(pred, target)))
 
 
+def mape(pred, target, insample: Optional[np.ndarray] = None) -> float:
+    pred_array, target_array = _arrays(pred, target)
+    denominator = np.where(target_array == 0.0, np.nan, np.abs(target_array))
+    values = np.abs(pred_array - target_array) / denominator
+    return float(np.nanmean(values))
+
+
 def smape(pred, target, insample: Optional[np.ndarray] = None) -> float:
     pred_array, target_array = _arrays(pred, target)
     denominator = np.abs(pred_array) + np.abs(target_array)
@@ -52,6 +59,7 @@ METRIC_REGISTRY = {
     "mae": mae,
     "mse": mse,
     "rmse": rmse,
+    "mape": mape,
     "smape": smape,
     "mase": mase,
 }

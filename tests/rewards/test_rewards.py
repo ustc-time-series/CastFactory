@@ -42,6 +42,29 @@ class RewardTests(unittest.TestCase):
         self.assertAlmostEqual(result.value, -0.125)
         self.assertEqual(result.details["format"], 1.0)
 
+    def test_composite_reward_can_clip_to_unit_range(self):
+        from castfactory.rewards import CompositeReward, RewardResult
+
+        reward = CompositeReward(weights={"accuracy": 1.0}, normalize=True)
+        result = reward.combine([RewardResult(name="accuracy", value=-10.0, details={})])
+
+        self.assertEqual(result.value, -1.0)
+
+    def test_calibration_reward_scores_interval_coverage(self):
+        from castfactory.rewards import CalibrationReward
+
+        reward = CalibrationReward()
+        result = reward.compute(
+            quantile_forecast={
+                "q10": np.array([[0.0], [2.0]]),
+                "q90": np.array([[2.0], [4.0]]),
+            },
+            target=np.array([[1.0], [5.0]]),
+        )
+
+        self.assertEqual(result.name, "calibration")
+        self.assertEqual(result.details["coverage"], 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()

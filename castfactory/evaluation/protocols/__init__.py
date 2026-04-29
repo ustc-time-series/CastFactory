@@ -1,3 +1,8 @@
-from castfactory.evaluation.protocols.standard import EvaluationResult, StandardEvaluator
+from castfactory.evaluation.protocols.standard import (
+    EvaluationResult,
+    RollingEvaluator,
+    StandardEvaluator,
+    ZeroShotEvaluator,
+)
 
-__all__ = ["EvaluationResult", "StandardEvaluator"]
+__all__ = ["EvaluationResult", "RollingEvaluator", "StandardEvaluator", "ZeroShotEvaluator"]

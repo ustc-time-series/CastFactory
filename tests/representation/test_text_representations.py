@@ -57,6 +57,33 @@ class TextRepresentationTests(unittest.TestCase):
         self.assertIn("domain=energy", model_input.text_prompt)
         self.assertIn("mean=2.0000", model_input.text_prompt)
 
+    def test_textual_summary_generates_readable_time_series_description(self):
+        from castfactory.representation import TextualSummaryRepresentation
+
+        model_input = TextualSummaryRepresentation().encode(self.make_sample())
+
+        self.assertIn("The time series spans", model_input.text_prompt)
+        self.assertIn('Channel "load"', model_input.text_prompt)
+        self.assertIn("Recent trend: upward", model_input.text_prompt)
+        self.assertIn("Last observed value: 3.0000", model_input.text_prompt)
+
+    def test_hybrid_representation_preserves_embeddings(self):
+        from castfactory.representation import HybridRepresentation, ModelInput
+
+        class EmbeddingComponent:
+            def __init__(self, value):
+                self.value = value
+
+            def encode(self, sample):
+                return ModelInput(embeddings=np.array([[self.value, self.value + 1.0]]))
+
+        model_input = HybridRepresentation([
+            EmbeddingComponent(1.0),
+            EmbeddingComponent(3.0),
+        ]).encode(self.make_sample())
+
+        np.testing.assert_allclose(model_input.embeddings, np.array([[1.0, 2.0], [3.0, 4.0]]))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,7 @@ import pandas as pd
 
 class MetricsAndStandardEvalTests(unittest.TestCase):
     def test_point_metrics_compute_expected_values(self):
-        from castfactory.evaluation.metrics import mae, mase, mse, smape
+        from castfactory.evaluation.metrics import mae, mape, mase, mse, smape
 
         target = np.array([[2.0], [4.0], [6.0]])
         pred = np.array([[1.0], [5.0], [7.0]])
@@ -14,8 +14,21 @@ class MetricsAndStandardEvalTests(unittest.TestCase):
 
         self.assertAlmostEqual(mae(pred, target), 1.0)
         self.assertAlmostEqual(mse(pred, target), 1.0)
+        self.assertAlmostEqual(mape(pred, target), 0.3055555556)
         self.assertAlmostEqual(smape(pred, target), 0.3475783476)
         self.assertAlmostEqual(mase(pred, target, insample), 1.0)
+
+    def test_llm_output_metrics_compute_rates(self):
+        from castfactory.evaluation.metrics import format_valid_rate, parse_success_rate
+
+        rows = [
+            {"parse_success": True, "fallback_used": False},
+            {"parse_success": False, "fallback_used": True},
+            {"parse_success": True, "fallback_used": True},
+        ]
+
+        self.assertAlmostEqual(parse_success_rate(rows), 2 / 3)
+        self.assertAlmostEqual(format_valid_rate(rows), 1 / 3)
 
     def test_standard_evaluator_collects_predictions_and_metrics(self):
         from castfactory.data.records import ForecastSample, TSRecord
@@ -58,6 +71,12 @@ class MetricsAndStandardEvalTests(unittest.TestCase):
         self.assertEqual(len(result.predictions), 2)
         self.assertEqual(result.predictions[0]["sample_id"], "s1")
         self.assertEqual(result.predictions[1]["step"], 2)
+
+    def test_rolling_and_zero_shot_evaluators_share_standard_contract(self):
+        from castfactory.evaluation.protocols import RollingEvaluator, ZeroShotEvaluator
+
+        self.assertEqual(RollingEvaluator(metrics=["mae"]).protocol_name, "rolling")
+        self.assertEqual(ZeroShotEvaluator(metrics=["mae"]).protocol_name, "zero_shot")
 
 
 if __name__ == "__main__":

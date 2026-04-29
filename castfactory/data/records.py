@@ -85,6 +85,32 @@ class TSRecord:
             metadata=dict(self.metadata),
         )
 
+    def select_channels(self, channels: Sequence[str], *, target_channels: Optional[Sequence[str]] = None, covariate_channels: Optional[Sequence[str]] = None) -> "TSRecord":
+        indices = []
+        missing = []
+        for channel in channels:
+            if channel in self.channel_names:
+                indices.append(self.channel_names.index(channel))
+            else:
+                missing.append(channel)
+        if missing:
+            raise ValueError(f"channels not present in TSRecord: {missing}")
+        selected_targets = list(target_channels) if target_channels is not None else [
+            channel for channel in channels if channel in self.target_channels
+        ]
+        selected_covariates = list(covariate_channels) if covariate_channels is not None else [
+            channel for channel in channels if channel in self.covariate_channels
+        ]
+        return TSRecord(
+            values=self.values[:, indices].copy(),
+            timestamps=self.timestamps,
+            channel_names=list(channels),
+            target_channels=selected_targets,
+            covariate_channels=selected_covariates,
+            static_context=dict(self.static_context),
+            metadata=dict(self.metadata),
+        )
+
 
 @dataclass
 class ForecastSample:
