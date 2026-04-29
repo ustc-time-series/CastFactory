@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "castfactory"
+version = "0.1.0"
+description = "Recipe-centric framework for LLM-driven time series forecasting research"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "pandas",
+  "PyYAML",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+]
+
+[project.scripts]
+castfactory = "castfactory.cli.run:main"
+
+[tool.setuptools.packages.find]
+include = ["castfactory*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
