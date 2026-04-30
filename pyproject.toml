@@ -15,6 +15,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+hf = [
+  "torch",
+  "transformers",
+]
+peft = [
+  "peft",
+]
+train = [
+  "torch",
+  "transformers",
+  "peft",
+]
 dev = [
   "pytest",
   "ruff",

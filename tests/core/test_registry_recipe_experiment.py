@@ -45,6 +45,16 @@ class RegistryRecipeExperimentTests(unittest.TestCase):
         ]:
             self.assertTrue(hasattr(registry, name), name)
 
+    def test_package_declares_training_extras(self):
+        pyproject = Path("pyproject.toml")
+        text = pyproject.read_text(encoding="utf-8")
+
+        self.assertIn("hf = [", text)
+        self.assertIn('"transformers"', text)
+        self.assertIn("peft = [", text)
+        self.assertIn('"peft"', text)
+        self.assertIn("train = [", text)
+
     def test_recipe_loads_yaml_and_applies_defaults(self):
         from castfactory.core.recipe import RecipeConfig
 
@@ -172,27 +182,133 @@ trace:
         from castfactory import Experiment
         from castfactory.core import registry
 
+        class DummyBackbone:
+            def __init__(self, model_name):
+                self.model_name = model_name
+                self.model = None
+                self.tokenizer = None
+
+            def load(self):
+                self.model = f"model:{self.model_name}"
+                self.tokenizer = f"tokenizer:{self.model_name}"
+                return self
+
         class DummyTrainer:
-            def __init__(self, marker):
+            def __init__(self, marker, train_dataset, checkpoint_dir, model, tokenizer):
                 self.marker = marker
+                self.train_dataset = train_dataset
+                self.checkpoint_dir = checkpoint_dir
+                self.model = model
+                self.tokenizer = tokenizer
 
             def fit(self):
-                return {"status": "trained", "marker": self.marker}
+                return {
+                    "status": "trained",
+                    "marker": self.marker,
+                    "num_examples": len(self.train_dataset),
+                    "checkpoint_dir": str(self.checkpoint_dir),
+                    "model": self.model,
+                    "tokenizer": self.tokenizer,
+                }
 
         try:
+            registry.register_backbone("dummy_hf", DummyBackbone)
             registry.register_trainer("dummy", DummyTrainer)
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                csv_path = tmp_path / "series.csv"
+                csv_path.write_text(
+                    "date,OT\n"
+                    "2022-01-01 00:00,1.0\n"
+                    "2022-01-01 01:00,2.0\n"
+                    "2022-01-01 02:00,3.0\n"
+                    "2022-01-01 03:00,4.0\n"
+                    "2022-01-01 04:00,5.0\n"
+                    "2022-01-01 05:00,6.0\n"
+                )
+                experiment = Experiment.from_mapping(
+                    {
+                        "experiment": {"name": "fit_delegate"},
+                        "data": {
+                            "reader": {
+                                "name": "csv",
+                                "path": str(csv_path),
+                                "timestamp_col": "date",
+                                "target_channels": ["OT"],
+                            },
+                            "split": {
+                                "type": "timestamp",
+                                "train_end": "2022-01-01 03:00",
+                                "val_end": "2022-01-01 04:00",
+                                "test_end": "2022-01-01 05:00",
+                            },
+                            "window": {"context_length": 2, "prediction_length": 1, "stride": 1},
+                        },
+                        "model": {"backbone": {"name": "dummy_hf", "model_name": "tiny"}},
+                        "representation": {"name": "statistics", "features": ["mean", "last"]},
+                        "training": {
+                            "trainer": {"name": "dummy", "marker": "ok"},
+                            "checkpoint_dir": str(tmp_path / "checkpoints"),
+                        },
+                    }
+                )
+
+                result = experiment.fit()
+        finally:
+            registry.clear_all()
+
+        self.assertEqual(result["status"], "trained")
+        self.assertEqual(result["marker"], "ok")
+        self.assertEqual(result["num_examples"], 2)
+        self.assertTrue(result["checkpoint_dir"].endswith("checkpoints"))
+        self.assertEqual(result["model"], "model:tiny")
+        self.assertEqual(result["tokenizer"], "tokenizer:tiny")
+
+    def test_experiment_fit_builds_default_sft_dataset_from_recipe(self):
+        from castfactory import Experiment
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            csv_path = tmp_path / "series.csv"
+            csv_path.write_text(
+                "date,OT,hour\n"
+                "2022-01-01 00:00,1.0,0\n"
+                "2022-01-01 01:00,2.0,1\n"
+                "2022-01-01 02:00,3.0,2\n"
+                "2022-01-01 03:00,4.0,3\n"
+                "2022-01-01 04:00,5.0,4\n"
+                "2022-01-01 05:00,6.0,5\n"
+            )
             experiment = Experiment.from_mapping(
                 {
-                    "experiment": {"name": "fit_delegate"},
-                    "training": {"trainer": {"name": "dummy", "marker": "ok"}},
+                    "experiment": {"name": "default_fit"},
+                    "data": {
+                        "reader": {
+                            "name": "csv",
+                            "path": str(csv_path),
+                            "timestamp_col": "date",
+                            "target_channels": ["OT"],
+                            "covariate_channels": ["hour"],
+                        },
+                        "split": {
+                            "type": "timestamp",
+                            "train_end": "2022-01-01 03:00",
+                            "val_end": "2022-01-01 04:00",
+                            "test_end": "2022-01-01 05:00",
+                        },
+                        "window": {"context_length": 2, "prediction_length": 1, "stride": 1},
+                    },
+                    "representation": {"name": "statistics", "features": ["mean", "last"]},
+                    "training": {"checkpoint_dir": str(tmp_path / "checkpoints")},
                 }
             )
 
             result = experiment.fit()
-        finally:
-            registry.clear_all()
 
-        self.assertEqual(result, {"status": "trained", "marker": "ok"})
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "No SFT backend configured")
+        self.assertEqual(result["num_examples"], 2)
+        self.assertTrue(result["checkpoint_dir"].endswith("checkpoints"))
 
 
 if __name__ == "__main__":

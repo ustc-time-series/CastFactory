@@ -47,6 +47,27 @@ class TrainerTests(unittest.TestCase):
         self.assertEqual(backend.received["train_args"], {"max_steps": 3})
         self.assertEqual(len(backend.received["train_dataset"]), 1)
 
+    def test_transformers_sft_backend_tokenizes_prompt_and_output(self):
+        from castfactory.training import TransformersSFTBackend
+
+        class FakeTokenizer:
+            eos_token = "<eos>"
+            pad_token = None
+
+            def __call__(self, text, truncation, max_length):
+                ids = [ord(char) for char in text]
+                input_ids = ids[:max_length]
+                return {"input_ids": input_ids, "attention_mask": [1] * len(input_ids)}
+
+        backend = TransformersSFTBackend(tokenizer=FakeTokenizer(), max_length=32)
+
+        rows = backend.prepare_dataset([{"input": "Q:", "output": "A"}])
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["input_ids"], [81, 58, 65, 60, 101, 111, 115, 62])
+        self.assertEqual(rows[0]["labels"][:2], [-100, -100])
+        self.assertEqual(rows[0]["labels"][2], 65)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -76,6 +76,45 @@ class ModelSkeletonTests(unittest.TestCase):
         self.assertEqual(text, "forecast only")
         self.assertEqual(backbone.tokenizer.decoded_tokens, [21, 22])
 
+    def test_hf_causal_lm_passes_loading_options(self):
+        from castfactory.models.backbones import HFCausalLMBackbone
+
+        class FakeTokenizerFactory:
+            kwargs = None
+
+            @classmethod
+            def from_pretrained(cls, model_name, **kwargs):
+                cls.kwargs = {"model_name": model_name, **kwargs}
+                return object()
+
+        class FakeModelFactory:
+            kwargs = None
+
+            @classmethod
+            def from_pretrained(cls, model_name, **kwargs):
+                cls.kwargs = {"model_name": model_name, **kwargs}
+                return object()
+
+        backbone = HFCausalLMBackbone(
+            model_name="local-model",
+            cache_dir="/tmp/hf-cache",
+            local_files_only=True,
+            device_map="auto",
+            torch_dtype="auto",
+            trust_remote_code=True,
+        )
+        backbone.load(
+            tokenizer_factory=FakeTokenizerFactory,
+            model_factory=FakeModelFactory,
+        )
+
+        self.assertEqual(FakeTokenizerFactory.kwargs["model_name"], "local-model")
+        self.assertEqual(FakeTokenizerFactory.kwargs["cache_dir"], "/tmp/hf-cache")
+        self.assertTrue(FakeTokenizerFactory.kwargs["local_files_only"])
+        self.assertTrue(FakeTokenizerFactory.kwargs["trust_remote_code"])
+        self.assertEqual(FakeModelFactory.kwargs["device_map"], "auto")
+        self.assertEqual(FakeModelFactory.kwargs["torch_dtype"], "auto")
+
 
 if __name__ == "__main__":
     unittest.main()

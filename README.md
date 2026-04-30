@@ -13,7 +13,7 @@ Implemented foundation modules:
 - `castfactory.evaluation`: point metrics and standard evaluator
 - `castfactory.trace`: run artifact store
 - `castfactory.rewards`: accuracy, format, and composite rewards
-- `castfactory.training`: minimal SFT dataset formatter
+- `castfactory.training`: SFT dataset formatter, trainer shell, and optional Transformers backend
 
 The architecture plan is in [docs/CastFactory_Library_Architecture.md](docs/CastFactory_Library_Architecture.md).
 
@@ -31,4 +31,11 @@ Optional dev tooling is declared in `pyproject.toml`:
 python -m pip install -e ".[dev]"
 python -m pytest tests -q
 python -m ruff check castfactory tests
+```
+
+Optional training stacks:
+
+```bash
+python -m pip install -e ".[hf]"
+python -m pip install -e ".[train]"
 ```
