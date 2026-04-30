@@ -11,6 +11,7 @@ from castfactory.data.splits import TimestampSplitter
 from castfactory.data.windows import WindowBuilder
 from castfactory.evaluation.protocols import RollingEvaluator, StandardEvaluator, ZeroShotEvaluator
 from castfactory.core.recipe import RecipeConfig
+from castfactory.core.registry import trainers
 from castfactory.trace import RunStore
 
 
@@ -33,6 +34,12 @@ class Experiment:
         return str(self.recipe.experiment["name"])
 
     def fit(self) -> Dict[str, Any]:
+        trainer_config = self.recipe.training.get("trainer")
+        if trainer_config:
+            trainer = trainers.build(trainer_config)
+            if not hasattr(trainer, "fit"):
+                raise TypeError("Configured trainer must expose a fit() method")
+            return dict(trainer.fit() or {})
         return {"status": "skipped", "reason": "No training backend configured"}
 
     def evaluate(self) -> Dict[str, Any]:
@@ -48,7 +55,11 @@ class Experiment:
         store.save_predictions(result.predictions)
         store.write_leaderboard(result.metrics)
         store.write_report(self.name, result.metrics)
-        return {"metrics": result.metrics, "predictions": result.predictions, "run_dir": str(store.path)}
+        return {
+            "metrics": result.metrics,
+            "predictions": result.predictions,
+            "run_dir": str(store.path),
+        }
 
     def predict(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         values = np.asarray(inputs["context_values"], dtype=float)
@@ -104,7 +115,12 @@ class Experiment:
             return RollingEvaluator(metrics=metrics)
         if protocol == "zero_shot":
             return ZeroShotEvaluator(metrics=metrics)
-        return StandardEvaluator(metrics=metrics)
+        if protocol == "standard":
+            return StandardEvaluator(metrics=metrics)
+        raise ValueError(
+            "Unknown evaluation protocol "
+            f"'{protocol}'. Available protocols: rolling, standard, zero_shot"
+        )
 
     def _last_value_predictor(self, samples):
         forecasts = []

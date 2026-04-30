@@ -160,6 +160,40 @@ trace:
 
         self.assertEqual(result["forecast"], [[2.5], [2.5], [2.5]])
 
+    def test_experiment_rejects_unknown_evaluation_protocol(self):
+        from castfactory import Experiment
+
+        experiment = Experiment.from_mapping({"experiment": {"name": "bad_protocol"}})
+
+        with self.assertRaisesRegex(ValueError, "Unknown evaluation protocol"):
+            experiment._build_evaluator("agentic", ["mae"])
+
+    def test_experiment_fit_can_delegate_to_registered_trainer(self):
+        from castfactory import Experiment
+        from castfactory.core import registry
+
+        class DummyTrainer:
+            def __init__(self, marker):
+                self.marker = marker
+
+            def fit(self):
+                return {"status": "trained", "marker": self.marker}
+
+        try:
+            registry.register_trainer("dummy", DummyTrainer)
+            experiment = Experiment.from_mapping(
+                {
+                    "experiment": {"name": "fit_delegate"},
+                    "training": {"trainer": {"name": "dummy", "marker": "ok"}},
+                }
+            )
+
+            result = experiment.fit()
+        finally:
+            registry.clear_all()
+
+        self.assertEqual(result, {"status": "trained", "marker": "ok"})
+
 
 if __name__ == "__main__":
     unittest.main()

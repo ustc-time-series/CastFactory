@@ -20,6 +20,33 @@ class TrainerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "train_dataset"):
                 trainer.fit()
 
+    def test_sft_trainer_delegates_to_backend(self):
+        from castfactory.training import SFTTrainer
+
+        class Backend:
+            def __init__(self):
+                self.received = None
+
+            def fit(self, **kwargs):
+                self.received = kwargs
+                return {"status": "trained", "steps": 3}
+
+        backend = Backend()
+        with tempfile.TemporaryDirectory() as tmp:
+            trainer = SFTTrainer(
+                train_dataset=[{"input": "x", "output": "y"}],
+                checkpoint_dir=f"{tmp}/sft",
+                backend=backend,
+                train_args={"max_steps": 3},
+            )
+
+            result = trainer.fit()
+
+        self.assertEqual(result["status"], "trained")
+        self.assertEqual(result["steps"], 3)
+        self.assertEqual(backend.received["train_args"], {"max_steps": 3})
+        self.assertEqual(len(backend.received["train_dataset"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

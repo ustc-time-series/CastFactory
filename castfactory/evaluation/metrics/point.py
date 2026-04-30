@@ -9,7 +9,9 @@ def _arrays(pred, target) -> tuple[np.ndarray, np.ndarray]:
     pred_array = np.asarray(pred, dtype=float)
     target_array = np.asarray(target, dtype=float)
     if pred_array.shape != target_array.shape:
-        raise ValueError(f"prediction shape {pred_array.shape} != target shape {target_array.shape}")
+        raise ValueError(
+            f"prediction shape {pred_array.shape} != target shape {target_array.shape}"
+        )
     return pred_array, target_array
 
 
@@ -29,15 +31,25 @@ def rmse(pred, target, insample: Optional[np.ndarray] = None) -> float:
 
 def mape(pred, target, insample: Optional[np.ndarray] = None) -> float:
     pred_array, target_array = _arrays(pred, target)
-    denominator = np.where(target_array == 0.0, np.nan, np.abs(target_array))
-    values = np.abs(pred_array - target_array) / denominator
-    return float(np.nanmean(values))
+    nonzero = target_array != 0.0
+    if np.any(nonzero):
+        values = np.abs(pred_array[nonzero] - target_array[nonzero]) / np.abs(
+            target_array[nonzero]
+        )
+        return float(np.mean(values))
+    if np.all(pred_array == target_array):
+        return 0.0
+    return float("inf")
 
 
 def smape(pred, target, insample: Optional[np.ndarray] = None) -> float:
     pred_array, target_array = _arrays(pred, target)
     denominator = np.abs(pred_array) + np.abs(target_array)
-    values = np.where(denominator == 0.0, 0.0, 2.0 * np.abs(pred_array - target_array) / denominator)
+    values = np.where(
+        denominator == 0.0,
+        0.0,
+        2.0 * np.abs(pred_array - target_array) / denominator,
+    )
     return float(np.mean(values))
 
 

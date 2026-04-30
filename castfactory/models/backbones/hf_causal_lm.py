@@ -28,4 +28,8 @@ class HFCausalLMBackbone:
         options.update(kwargs)
         inputs = self.tokenizer(prompt, return_tensors="pt")
         outputs = self.model.generate(**inputs, **options)
-        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        input_length = inputs["input_ids"].shape[-1]
+        generated_tokens = outputs[0][input_length:]
+        if hasattr(generated_tokens, "tolist"):
+            generated_tokens = generated_tokens.tolist()
+        return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)

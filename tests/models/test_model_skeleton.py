@@ -49,6 +49,33 @@ class ModelSkeletonTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "model_name"):
             HFCausalLMBackbone(model_name="")
 
+    def test_hf_causal_lm_decodes_only_new_tokens(self):
+        from castfactory.models.backbones import HFCausalLMBackbone
+
+        class FakeTokenizer:
+            def __init__(self):
+                self.decoded_tokens = None
+
+            def __call__(self, prompt, return_tensors):
+                return {"input_ids": np.array([[10, 11, 12]])}
+
+            def decode(self, tokens, skip_special_tokens):
+                self.decoded_tokens = list(tokens)
+                return "forecast only"
+
+        class FakeModel:
+            def generate(self, **kwargs):
+                return np.array([[10, 11, 12, 21, 22]])
+
+        backbone = HFCausalLMBackbone(model_name="fake")
+        backbone.tokenizer = FakeTokenizer()
+        backbone.model = FakeModel()
+
+        text = backbone.generate_text("prompt")
+
+        self.assertEqual(text, "forecast only")
+        self.assertEqual(backbone.tokenizer.decoded_tokens, [21, 22])
+
 
 if __name__ == "__main__":
     unittest.main()
