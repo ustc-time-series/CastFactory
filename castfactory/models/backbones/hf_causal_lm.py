@@ -70,9 +70,27 @@ class HFCausalLMBackbone:
         options = dict(self.generation_defaults)
         options.update(kwargs)
         inputs = self.tokenizer(prompt, return_tensors="pt")
+        inputs = self._move_inputs_to_model_device(inputs)
         outputs = self.model.generate(**inputs, **options)
         input_length = inputs["input_ids"].shape[-1]
         generated_tokens = outputs[0][input_length:]
         if hasattr(generated_tokens, "tolist"):
             generated_tokens = generated_tokens.tolist()
         return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+    def _move_inputs_to_model_device(self, inputs: dict) -> dict:
+        device = self._model_device()
+        if device is None:
+            return inputs
+        moved = {}
+        for key, value in inputs.items():
+            moved[key] = value.to(device) if hasattr(value, "to") else value
+        return moved
+
+    def _model_device(self):
+        if not hasattr(self.model, "parameters"):
+            return None
+        try:
+            return next(self.model.parameters()).device
+        except StopIteration:
+            return None

@@ -19,8 +19,12 @@ class LeakageChecker:
             if sample.observed_window.timestamps[-1] != sample.cutoff_time:
                 issues.append(LeakageIssue(index, "observed window must end at cutoff_time"))
             if not (sample.future_unknown_window.timestamps > sample.cutoff_time).all():
-                issues.append(LeakageIssue(index, "future_unknown_window must be after cutoff_time"))
+                issues.append(
+                    LeakageIssue(index, "future_unknown_window must be after cutoff_time")
+                )
             if sample.future_known_window is not None:
                 if not (sample.future_known_window.timestamps > sample.cutoff_time).all():
-                    issues.append(LeakageIssue(index, "future_known_window must be after cutoff_time"))
+                    issues.append(
+                        LeakageIssue(index, "future_known_window must be after cutoff_time")
+                    )
         return issues

@@ -11,6 +11,7 @@ class TransformersSFTBackend:
         tokenizer=None,
         trainer_cls=None,
         training_args_cls=None,
+        data_collator_cls=None,
         max_length: int = 2048,
         **default_train_args,
     ):
@@ -20,6 +21,7 @@ class TransformersSFTBackend:
         self.tokenizer = tokenizer
         self.trainer_cls = trainer_cls
         self.training_args_cls = training_args_cls
+        self.data_collator_cls = data_collator_cls
         self.max_length = max_length
         self.default_train_args = dict(default_train_args)
 
@@ -68,16 +70,23 @@ class TransformersSFTBackend:
         model = model or self.model
         if model is None:
             raise ValueError("TransformersSFTBackend.fit requires a model")
+        self._ensure_pad_token()
         tokenized_dataset = self.prepare_dataset(train_dataset)
-        trainer_cls, training_args_cls = self._trainer_types()
+        trainer_cls, training_args_cls, data_collator_cls = self._trainer_types()
         args = dict(self.default_train_args)
         args.update(train_args or {})
         args.setdefault("output_dir", str(checkpoint_dir))
         training_args = training_args_cls(**args)
+        data_collator = data_collator_cls(
+            tokenizer=self._require_tokenizer(),
+            model=model,
+            padding=True,
+        )
         trainer = trainer_cls(
             model=model,
             args=training_args,
             train_dataset=tokenized_dataset,
+            data_collator=data_collator,
         )
         train_result = trainer.train()
         if hasattr(trainer, "save_model"):
@@ -95,13 +104,29 @@ class TransformersSFTBackend:
             raise ValueError("TransformersSFTBackend requires a tokenizer")
         return self.tokenizer
 
+    def _ensure_pad_token(self) -> None:
+        tokenizer = self._require_tokenizer()
+        if getattr(tokenizer, "pad_token", None) is None:
+            eos_token = getattr(tokenizer, "eos_token", None)
+            if eos_token is None:
+                raise ValueError("Tokenizer must define pad_token or eos_token")
+            tokenizer.pad_token = eos_token
+
     def _trainer_types(self):
-        if self.trainer_cls is not None and self.training_args_cls is not None:
-            return self.trainer_cls, self.training_args_cls
+        if (
+            self.trainer_cls is not None
+            and self.training_args_cls is not None
+            and self.data_collator_cls is not None
+        ):
+            return self.trainer_cls, self.training_args_cls, self.data_collator_cls
         try:
-            from transformers import Trainer, TrainingArguments
+            from transformers import DataCollatorForSeq2Seq, Trainer, TrainingArguments
         except ImportError as exc:
             raise ImportError(
                 "TransformersSFTBackend requires the optional 'transformers' dependency"
             ) from exc
-        return self.trainer_cls or Trainer, self.training_args_cls or TrainingArguments
+        return (
+            self.trainer_cls or Trainer,
+            self.training_args_cls or TrainingArguments,
+            self.data_collator_cls or DataCollatorForSeq2Seq,
+        )

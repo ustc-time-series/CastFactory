@@ -45,7 +45,11 @@ class TextRepresentationTests(unittest.TestCase):
         self.assertIn("std=", model_input.text_prompt)
 
     def test_hybrid_representation_combines_text_prompts(self):
-        from castfactory.representation import ContextRepresentation, HybridRepresentation, StatisticsRepresentation
+        from castfactory.representation import (
+            ContextRepresentation,
+            HybridRepresentation,
+            StatisticsRepresentation,
+        )
 
         representation = HybridRepresentation([
             ContextRepresentation(include_domain=True),
@@ -83,6 +87,28 @@ class TextRepresentationTests(unittest.TestCase):
         ]).encode(self.make_sample())
 
         np.testing.assert_allclose(model_input.embeddings, np.array([[1.0, 2.0], [3.0, 4.0]]))
+
+    def test_numerical_patch_representation_builds_patch_embeddings(self):
+        from castfactory.representation import NumericalPatchRepresentation
+
+        representation = NumericalPatchRepresentation(patch_size=2, stride=1)
+        model_input = representation.encode(self.make_sample())
+
+        np.testing.assert_allclose(model_input.embeddings, np.array([[1.0, 2.0], [2.0, 3.0]]))
+        self.assertEqual(model_input.metadata["representation"], "numerical_patch")
+
+    def test_discrete_token_representation_quantizes_values(self):
+        from castfactory.representation import DiscreteTokenRepresentation
+
+        model_input = DiscreteTokenRepresentation(
+            num_bins=4,
+            value_min=0.0,
+            value_max=4.0,
+            token_offset=100,
+        ).encode(self.make_sample())
+
+        self.assertEqual(model_input.token_ids.tolist(), [101, 102, 103])
+        self.assertEqual(model_input.metadata["representation"], "discrete_token")
 
 
 if __name__ == "__main__":

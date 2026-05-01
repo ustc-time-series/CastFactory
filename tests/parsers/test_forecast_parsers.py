@@ -10,7 +10,12 @@ class ForecastParserTests(unittest.TestCase):
         parser = JSONForecastParser()
         result = parser.parse(
             '{"forecast": [1.0, 2.5, 3.0]}',
-            ParseContext(prediction_length=3, num_channels=1, output_schema="forecast_json_v1", channel_names=["load"]),
+            ParseContext(
+                prediction_length=3,
+                num_channels=1,
+                output_schema="forecast_json_v1",
+                channel_names=["load"],
+            ),
         )
 
         self.assertTrue(result.success)
@@ -23,7 +28,12 @@ class ForecastParserTests(unittest.TestCase):
         parser = ArrayForecastParser()
         result = parser.parse(
             "Forecast: [4, 5.5, -6]",
-            ParseContext(prediction_length=3, num_channels=1, output_schema="array", channel_names=["load"]),
+            ParseContext(
+                prediction_length=3,
+                num_channels=1,
+                output_schema="array",
+                channel_names=["load"],
+            ),
         )
 
         self.assertTrue(result.success)

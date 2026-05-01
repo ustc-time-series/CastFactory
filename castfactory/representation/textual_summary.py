@@ -16,7 +16,8 @@ class TextualSummaryRepresentation:
         end = sample.observed_window.timestamps[-1]
         freq = sample.observed_window.static_context.get("freq", "unknown")
         lines = [
-            f"The time series spans {start} to {end} ({len(sample.observed_window)} steps, freq={freq})."
+            "The time series spans "
+            f"{start} to {end} ({len(sample.observed_window)} steps, freq={freq})."
         ]
         for channel_index, channel_name in enumerate(sample.observed_window.channel_names):
             channel = values[:, channel_index]

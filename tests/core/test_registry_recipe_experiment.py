@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -157,6 +158,68 @@ trace:
         self.assertEqual(len(predictions), 1)
         self.assertTrue(report_path.name.endswith("report.md"))
 
+    def test_experiment_evaluate_supports_protocols_list(self):
+        from castfactory import Experiment
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            csv_path = tmp_path / "series.csv"
+            csv_path.write_text(
+                "date,OT\n"
+                "2022-01-01 00:00,1.0\n"
+                "2022-01-01 01:00,2.0\n"
+                "2022-01-01 02:00,3.0\n"
+                "2022-01-01 03:00,4.0\n"
+                "2022-01-01 04:00,5.0\n"
+                "2022-01-01 05:00,6.0\n"
+            )
+            experiment = Experiment.from_mapping(
+                {
+                    "experiment": {"name": "eval_protocols"},
+                    "data": {
+                        "reader": {
+                            "name": "csv",
+                            "path": str(csv_path),
+                            "timestamp_col": "date",
+                            "target_channels": ["OT"],
+                        },
+                        "split": {
+                            "type": "timestamp",
+                            "train_end": "2022-01-01 01:00",
+                            "val_end": "2022-01-01 03:00",
+                            "test_end": "2022-01-01 05:00",
+                        },
+                        "window": {"context_length": 1, "prediction_length": 1},
+                    },
+                    "evaluation": {"protocols": ["standard", "rolling"], "metrics": ["mae"]},
+                    "trace": {"run_root": str(tmp_path / "runs")},
+                }
+            )
+
+            result = experiment.evaluate()
+
+        self.assertIn("standard", result["protocols"])
+        self.assertIn("rolling", result["protocols"])
+        self.assertIn("standard.mae", result["metrics"])
+
+    def test_experiment_report_uses_existing_metrics(self):
+        from castfactory import Experiment
+
+        with tempfile.TemporaryDirectory() as tmp:
+            experiment = Experiment.from_mapping(
+                {
+                    "experiment": {"name": "report_existing"},
+                    "trace": {"run_root": tmp},
+                }
+            )
+            store = experiment._run_store()
+            store.write_json("metrics.json", {"mae": 0.25})
+
+            report_path = experiment.report()
+            text = report_path.read_text(encoding="utf-8")
+
+        self.assertIn("0.25", text)
+
     def test_experiment_predict_uses_last_value_baseline(self):
         from castfactory import Experiment
 
@@ -177,6 +240,26 @@ trace:
 
         with self.assertRaisesRegex(ValueError, "Unknown evaluation protocol"):
             experiment._build_evaluator("agentic", ["mae"])
+
+    def test_experiment_builds_hybrid_representation_from_recipe(self):
+        from castfactory import Experiment
+
+        experiment = Experiment.from_mapping(
+            {
+                "experiment": {"name": "hybrid_recipe"},
+                "representation": {
+                    "name": "hybrid",
+                    "components": [
+                        {"name": "context", "include_domain": True},
+                        {"name": "statistics", "features": ["mean"]},
+                    ],
+                },
+            }
+        )
+
+        representation = experiment._build_representation()
+
+        self.assertEqual(len(representation.components), 2)
 
     def test_experiment_fit_can_delegate_to_registered_trainer(self):
         from castfactory import Experiment
@@ -309,6 +392,82 @@ trace:
         self.assertEqual(result["reason"], "No SFT backend configured")
         self.assertEqual(result["num_examples"], 2)
         self.assertTrue(result["checkpoint_dir"].endswith("checkpoints"))
+
+    def test_experiment_fit_applies_peft_adapter(self):
+        from castfactory import Experiment
+        from castfactory.core import registry
+
+        class DummyBackbone:
+            def __init__(self, model_name):
+                self.model_name = model_name
+                self.model = f"model:{model_name}"
+                self.tokenizer = "tokenizer"
+
+            def load(self):
+                return self
+
+        class DummyPEFTAdapter:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            def apply(self, model):
+                return f"peft({model})"
+
+        class DummyTrainer:
+            def __init__(self, train_dataset, checkpoint_dir, model, tokenizer):
+                self.model = model
+
+            def fit(self):
+                return {"model": self.model}
+
+        try:
+            registry.register_backbone("dummy_peft_backbone", DummyBackbone)
+            registry.register_trainer("dummy_peft_trainer", DummyTrainer)
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                csv_path = tmp_path / "series.csv"
+                csv_path.write_text(
+                    "date,OT\n"
+                    "2022-01-01 00:00,1.0\n"
+                    "2022-01-01 01:00,2.0\n"
+                    "2022-01-01 02:00,3.0\n"
+                    "2022-01-01 03:00,4.0\n"
+                    "2022-01-01 04:00,5.0\n"
+                )
+                experiment = Experiment.from_mapping(
+                    {
+                        "experiment": {"name": "fit_peft"},
+                        "data": {
+                            "reader": {
+                                "name": "csv",
+                                "path": str(csv_path),
+                                "timestamp_col": "date",
+                                "target_channels": ["OT"],
+                            },
+                            "split": {
+                                "type": "timestamp",
+                                "train_end": "2022-01-01 02:00",
+                                "val_end": "2022-01-01 03:00",
+                                "test_end": "2022-01-01 04:00",
+                            },
+                            "window": {"context_length": 1, "prediction_length": 1},
+                        },
+                        "model": {
+                            "backbone": {
+                                "name": "dummy_peft_backbone",
+                                "model_name": "tiny",
+                            },
+                            "peft": {"method": "lora", "r": 4},
+                        },
+                        "training": {"trainer": {"name": "dummy_peft_trainer"}},
+                    }
+                )
+                with patch("castfactory.core.experiment.PEFTAdapter", DummyPEFTAdapter):
+                    result = experiment.fit()
+        finally:
+            registry.clear_all()
+
+        self.assertEqual(result["model"], "peft(model:tiny)")
 
 
 if __name__ == "__main__":

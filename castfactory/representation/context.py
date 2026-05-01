@@ -21,4 +21,7 @@ class ContextRepresentation:
         if self.include_calendar:
             parts.append(f"cutoff_time={sample.cutoff_time}")
             parts.append(f"prediction_length={sample.prediction_length}")
-        return ModelInput(text_prompt="context(" + ", ".join(parts) + ")", metadata={"representation": "context"})
+        return ModelInput(
+            text_prompt="context(" + ", ".join(parts) + ")",
+            metadata={"representation": "context"},
+        )

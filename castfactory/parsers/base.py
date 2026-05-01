@@ -44,7 +44,11 @@ class ParserBase:
 
     def _fallback(self, context: ParseContext, error: str) -> ParseResult:
         strategy = context.fallback_strategy
-        observed = None if context.observed_values is None else np.asarray(context.observed_values, dtype=float)
+        observed = (
+            None
+            if context.observed_values is None
+            else np.asarray(context.observed_values, dtype=float)
+        )
         if strategy == "last_value" and observed is not None and observed.size:
             last = observed.reshape(-1, context.num_channels)[-1]
             forecast = np.tile(last, (context.prediction_length, 1))

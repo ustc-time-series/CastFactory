@@ -39,7 +39,7 @@ class MetricsAndStandardEvalTests(unittest.TestCase):
         self.assertAlmostEqual(format_valid_rate(rows), 1 / 3)
 
     def test_standard_evaluator_collects_predictions_and_metrics(self):
-        from castfactory.data.records import ForecastSample, TSRecord
+        from castfactory.data.records import ForecastResult, ForecastSample, TSRecord
         from castfactory.evaluation.protocols import StandardEvaluator
 
         observed = TSRecord(
@@ -79,6 +79,25 @@ class MetricsAndStandardEvalTests(unittest.TestCase):
         self.assertEqual(len(result.predictions), 2)
         self.assertEqual(result.predictions[0]["sample_id"], "s1")
         self.assertEqual(result.predictions[1]["step"], 2)
+        self.assertTrue(result.predictions[0]["parse_success"])
+        self.assertFalse(result.predictions[0]["fallback_used"])
+
+        parsed_result = ForecastResult(
+            point_forecast=np.array([[4.0], [6.0]]),
+            parse_success=False,
+            fallback_used=True,
+            raw_response="bad json",
+        )
+        llm_result = StandardEvaluator(
+            metrics=["parse_success_rate", "format_valid_rate"]
+        ).evaluate(
+            [sample],
+            lambda batch: [parsed_result for _ in batch],
+        )
+
+        self.assertEqual(llm_result.metrics["parse_success_rate"], 0.0)
+        self.assertEqual(llm_result.metrics["format_valid_rate"], 0.0)
+        self.assertEqual(llm_result.predictions[0]["raw_response"], "bad json")
 
     def test_standard_evaluator_rejects_empty_sample_sets(self):
         from castfactory.evaluation.protocols import StandardEvaluator

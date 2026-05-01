@@ -38,7 +38,10 @@ class TSRecord:
             raise ValueError("channel_names length must match values.shape[1]")
         unknown_targets = set(self.target_channels) - set(self.channel_names)
         if unknown_targets:
-            raise ValueError(f"target_channels not present in channel_names: {sorted(unknown_targets)}")
+            raise ValueError(
+                "target_channels not present in channel_names: "
+                f"{sorted(unknown_targets)}"
+            )
         unknown_covariates = set(self.covariate_channels) - set(self.channel_names)
         if unknown_covariates:
             raise ValueError(
@@ -85,7 +88,13 @@ class TSRecord:
             metadata=dict(self.metadata),
         )
 
-    def select_channels(self, channels: Sequence[str], *, target_channels: Optional[Sequence[str]] = None, covariate_channels: Optional[Sequence[str]] = None) -> "TSRecord":
+    def select_channels(
+        self,
+        channels: Sequence[str],
+        *,
+        target_channels: Optional[Sequence[str]] = None,
+        covariate_channels: Optional[Sequence[str]] = None,
+    ) -> "TSRecord":
         indices = []
         missing = []
         for channel in channels:

@@ -68,6 +68,67 @@ class TrainerTests(unittest.TestCase):
         self.assertEqual(rows[0]["labels"][:2], [-100, -100])
         self.assertEqual(rows[0]["labels"][2], 65)
 
+    def test_transformers_sft_backend_sets_pad_token_and_passes_collator(self):
+        from castfactory.training import TransformersSFTBackend
+
+        class FakeTokenizer:
+            eos_token = "<eos>"
+            pad_token = None
+
+            def __call__(self, text, truncation, max_length):
+                return {"input_ids": [1, 2], "attention_mask": [1, 1]}
+
+        class FakeCollator:
+            def __init__(self, tokenizer, model=None, padding=True):
+                self.tokenizer = tokenizer
+                self.model = model
+                self.padding = padding
+
+        class FakeTrainingArgs:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        class FakeTrainer:
+            received_collator = None
+
+            def __init__(self, model, args, train_dataset, data_collator):
+                FakeTrainer.received_collator = data_collator
+
+            def train(self):
+                return type("Result", (), {"metrics": {"loss": 0.0}})()
+
+        tokenizer = FakeTokenizer()
+        backend = TransformersSFTBackend(
+            tokenizer=tokenizer,
+            trainer_cls=FakeTrainer,
+            training_args_cls=FakeTrainingArgs,
+            data_collator_cls=FakeCollator,
+        )
+        result = backend.fit([{"input": "x", "output": "y"}], "/tmp/out", model=object())
+
+        self.assertEqual(result["status"], "trained")
+        self.assertEqual(tokenizer.pad_token, "<eos>")
+        self.assertIs(FakeTrainer.received_collator.tokenizer, tokenizer)
+
+    def test_rlvr_dataset_and_trainer_delegate_rollouts(self):
+        from castfactory.training import RLVRDataset, RLVRTrainer
+
+        class Backend:
+            def run(self, prompts, rewards):
+                return {
+                    "status": "trained",
+                    "num_prompts": len(prompts),
+                    "num_rewards": len(rewards),
+                }
+
+        dataset = RLVRDataset([{"prompt": "forecast", "target": [1.0]}])
+        trainer = RLVRTrainer(dataset=dataset, rewards=[object()], backend=Backend())
+
+        result = trainer.fit()
+
+        self.assertEqual(result["num_prompts"], 1)
+        self.assertEqual(result["num_rewards"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

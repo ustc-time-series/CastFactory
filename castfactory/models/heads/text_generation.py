@@ -8,7 +8,13 @@ class TextGenerationHead:
     def __init__(self, parser: ForecastParser):
         self.parser = parser
 
-    def generate(self, backbone, prompt: str, parse_context: ParseContext, **generation_kwargs) -> ForecastResult:
+    def generate(
+        self,
+        backbone,
+        prompt: str,
+        parse_context: ParseContext,
+        **generation_kwargs,
+    ) -> ForecastResult:
         raw_response = backbone.generate_text(prompt, **generation_kwargs)
         parsed = self.parser.parse(raw_response, parse_context)
         return ForecastResult(

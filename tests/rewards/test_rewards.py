@@ -65,6 +65,21 @@ class RewardTests(unittest.TestCase):
         self.assertEqual(result.name, "calibration")
         self.assertEqual(result.details["coverage"], 0.5)
 
+    def test_reasoning_reward_checks_future_timestamp_leakage(self):
+        from castfactory.rewards import ReasoningReward
+
+        result = ReasoningReward(max_horizon_steps=4).compute(
+            reasoning_text="Use history only and forecast horizon=2.",
+            cutoff_time="2022-01-01 00:00",
+        )
+        leaking = ReasoningReward(max_horizon_steps=4).compute(
+            reasoning_text="I can see 2022-01-02 after cutoff.",
+            cutoff_time="2022-01-01 00:00",
+        )
+
+        self.assertEqual(result.value, 1.0)
+        self.assertLess(leaking.value, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -115,6 +115,67 @@ class ModelSkeletonTests(unittest.TestCase):
         self.assertEqual(FakeModelFactory.kwargs["device_map"], "auto")
         self.assertEqual(FakeModelFactory.kwargs["torch_dtype"], "auto")
 
+    def test_hf_causal_lm_moves_inputs_to_model_device(self):
+        from castfactory.models.backbones import HFCausalLMBackbone
+
+        class FakeTensor:
+            def __init__(self, values):
+                self.values = values
+                self.device = None
+
+            @property
+            def shape(self):
+                return (1, len(self.values))
+
+            def to(self, device):
+                self.device = device
+                return self
+
+            def __getitem__(self, index):
+                if isinstance(index, slice):
+                    return self.values[index]
+                return self.values[index]
+
+        class FakeParameter:
+            device = "cuda:0"
+
+        class FakeTokenizer:
+            def __init__(self):
+                self.input_ids = FakeTensor([10, 11])
+
+            def __call__(self, prompt, return_tensors):
+                return {"input_ids": self.input_ids}
+
+            def decode(self, tokens, skip_special_tokens):
+                return "ok"
+
+        class FakeModel:
+            def __init__(self):
+                self.received = None
+
+            def parameters(self):
+                return iter([FakeParameter()])
+
+            def generate(self, **kwargs):
+                self.received = kwargs
+                return [FakeTensor([10, 11, 12])]
+
+        backbone = HFCausalLMBackbone(model_name="fake")
+        backbone.tokenizer = FakeTokenizer()
+        backbone.model = FakeModel()
+
+        self.assertEqual(backbone.generate_text("prompt"), "ok")
+        self.assertEqual(backbone.tokenizer.input_ids.device, "cuda:0")
+
+    def test_projector_bridge_projects_embeddings(self):
+        from castfactory.models.bridges import ProjectorBridge
+        from castfactory.representation import ModelInput
+
+        bridge = ProjectorBridge(weights=np.array([[1.0, 0.0], [0.0, 2.0]]))
+        output = bridge.project(ModelInput(embeddings=np.array([[3.0, 4.0]])))
+
+        np.testing.assert_allclose(output.embeddings, np.array([[3.0, 8.0]]))
+
 
 if __name__ == "__main__":
     unittest.main()
