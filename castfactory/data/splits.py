@@ -34,3 +34,26 @@ class TimestampSplitter:
             val=record.select_mask(val_mask),
             test=record.select_mask(test_mask),
         )
+
+
+class RatioSplitter:
+    def __init__(self, ratios: tuple[float, float, float] | list[float]):
+        if len(ratios) != 3:
+            raise ValueError("ratios must contain exactly three values")
+        self.ratios = tuple(float(value) for value in ratios)
+        if any(value <= 0.0 for value in self.ratios):
+            raise ValueError("ratios must be positive")
+        total = sum(self.ratios)
+        if abs(total - 1.0) > 1e-6:
+            raise ValueError("ratios must sum to 1.0")
+
+    def split(self, record: TSRecord) -> DataSplit:
+        total = len(record)
+        train_end = int(total * self.ratios[0])
+        val_end = train_end + int(total * self.ratios[1])
+        train = record.slice(0, train_end)
+        val = record.slice(train_end, val_end)
+        test = record.slice(val_end, total)
+        if not len(train) or not len(val) or not len(test):
+            raise ValueError("ratio split produced an empty train, val, or test partition")
+        return DataSplit(train=train, val=val, test=test)

@@ -62,6 +62,9 @@ class RunStore:
             handle.write(json.dumps(dict(error), sort_keys=True) + "\n")
         return path
 
+    def save_stage_metadata(self, payload: Mapping) -> Path:
+        return self.write_json("stage_metadata.json", payload)
+
     def _write_text(self, relative_path: str, text: str) -> Path:
         path = self.path / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)

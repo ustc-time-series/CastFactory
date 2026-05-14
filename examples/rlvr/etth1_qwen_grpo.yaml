@@ -1,0 +1,41 @@
+experiment:
+  name: etth1_ot_grpo_markdown_table
+  stage: rlvr
+
+data:
+  reader:
+    path: ./castfactory/dataset/ETTh1/ETTh1.csv
+    timestamp_col: date
+    target_channels: [OT]
+  split:
+    type: ratio
+    ratios: [0.7, 0.1, 0.2]
+  window:
+    context_length: 96
+    prediction_length: 96
+    stride: 1
+
+representation:
+  name: markdown_table
+  significant_digits: 2
+
+training:
+  checkpoint_dir: ./checkpoints/etth1_ot_qwen_grpo
+  init_checkpoint: ./checkpoints/etth1_ot_qwen_sft
+  instruction_template_file: ./etth1_qwen_grpo_prompt.txt
+  backend:
+    algorithm: grpo
+    verl:
+      data:
+        max_prompt_length: 4096
+        max_response_length: 8192
+      trainer:
+        total_epochs: 1
+        train_batch_size: 16
+        num_generations: 8
+      rollout:
+        inference_engine: vllm
+  rewards:
+    - name: format
+    - name: mse
+      temperature: 10.0

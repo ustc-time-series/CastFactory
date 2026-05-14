@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict
+
+from castfactory.training.base_trainer import BaseTrainer
+
+
+class CPTTrainer(BaseTrainer):
+    def __init__(
+        self,
+        train_dataset=None,
+        checkpoint_dir: str | Path = "checkpoints/cpt",
+        backend=None,
+        model=None,
+        tokenizer=None,
+        train_args: Dict[str, Any] | None = None,
+    ):
+        super().__init__(checkpoint_dir=checkpoint_dir)
+        self.train_dataset = train_dataset
+        self.backend = backend
+        self.model = model
+        self.tokenizer = tokenizer
+        self.train_args = dict(train_args or {})
+
+    def fit(self) -> Dict[str, Any]:
+        if self.train_dataset is None:
+            raise ValueError("CPTTrainer.fit requires a train_dataset")
+        if self.backend is None:
+            return {
+                "status": "skipped",
+                "reason": "No CPT backend configured",
+                "num_examples": len(self.train_dataset),
+                "checkpoint_dir": str(self.checkpoint_dir),
+            }
+        payload = {
+            "train_dataset": self.train_dataset,
+            "checkpoint_dir": self.checkpoint_dir,
+            "model": self.model,
+            "tokenizer": self.tokenizer,
+            "train_args": self.train_args,
+        }
+        if hasattr(self.backend, "fit"):
+            return dict(self.backend.fit(**payload) or {})
+        return dict(self.backend(**payload) or {})

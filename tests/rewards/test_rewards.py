@@ -80,6 +80,34 @@ class RewardTests(unittest.TestCase):
         self.assertEqual(result.value, 1.0)
         self.assertLess(leaking.value, 1.0)
 
+    def test_mse_reward_maps_mse_with_sigmoid(self):
+        from castfactory.rewards import MSEReward
+
+        reward = MSEReward(temperature=1.0)
+        result = reward.compute(
+            pred=np.array([[1.0], [3.0]]),
+            target=np.array([[1.0], [1.0]]),
+        )
+
+        expected_mse = 2.0
+        expected_reward = 1.0 / (1.0 + np.exp(expected_mse))
+        self.assertEqual(result.name, "mse")
+        self.assertAlmostEqual(result.details["mse"], expected_mse)
+        self.assertAlmostEqual(result.value, expected_reward)
+
+    def test_mse_reward_handles_large_errors_without_overflow_warning(self):
+        from castfactory.rewards import MSEReward
+
+        reward = MSEReward(temperature=1.0)
+        with np.errstate(over="raise"):
+            result = reward.compute(
+                pred=np.array([[1000.0]]),
+                target=np.array([[0.0]]),
+            )
+
+        self.assertEqual(result.name, "mse")
+        self.assertEqual(result.value, 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

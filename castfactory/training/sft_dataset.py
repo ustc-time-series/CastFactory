@@ -5,6 +5,11 @@ from typing import Iterable, List
 
 from castfactory.data.records import ForecastSample
 from castfactory.representation.base import RepresentationAdapter
+from castfactory.training.prompt_template import (
+    build_instruction_format_kwargs,
+    load_instruction_template,
+    template_uses_data_lookback,
+)
 
 
 DEFAULT_INSTRUCTION_TEMPLATE = (
@@ -22,7 +27,7 @@ class SFTDataset:
     ):
         self.samples: List[ForecastSample] = list(samples)
         self.representation = representation
-        self.instruction_template = instruction_template
+        self.instruction_template = load_instruction_template(instruction_template)
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -30,12 +35,10 @@ class SFTDataset:
     def __getitem__(self, index: int) -> dict:
         sample = self.samples[index]
         model_input = self.representation.encode(sample)
-        instruction = self.instruction_template.format(
-            prediction_length=sample.prediction_length,
-            cutoff_time=sample.cutoff_time,
-        )
+        format_kwargs = build_instruction_format_kwargs(sample, model_input)
+        instruction = self.instruction_template.format(**format_kwargs)
         input_parts = [instruction]
-        if model_input.text_prompt:
+        if model_input.text_prompt and not template_uses_data_lookback(self.instruction_template):
             input_parts.append(model_input.text_prompt)
         if sample.future_known_window is not None:
             input_parts.append(self._format_future_known(sample))

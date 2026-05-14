@@ -1,0 +1,44 @@
+experiment:
+  name: etth1_ot_qwen_sft
+  stage: sft
+  seed: 42
+
+data:
+  reader:
+    name: csv
+    path: ./castfactory/dataset/ETTh1/ETTh1.csv
+    timestamp_col: date
+    target_channels: [OT]
+  split:
+    type: ratio
+    ratios: [0.7, 0.1, 0.2]
+  window:
+    context_length: 96
+    prediction_length: 96
+    stride: 96
+
+representation:
+  name: markdown_table
+  significant_digits: 2
+
+model:
+  backbone:
+    name: hf_causal_lm
+    model_name: Qwen/Qwen2.5-1.5B
+    trust_remote_code: true
+  peft:
+    method: lora
+    r: 16
+    lora_alpha: 32
+    target_modules: [q_proj, v_proj]
+
+training:
+  init_checkpoint: ./checkpoints/etth1_ot_qwen_cpt
+  checkpoint_dir: ./checkpoints/etth1_ot_qwen_sft
+  backend:
+    name: transformers
+    max_prompt_length: 2048
+    max_response_length: 1024
+  args:
+    num_train_epochs: 1
+    learning_rate: 2.0e-4

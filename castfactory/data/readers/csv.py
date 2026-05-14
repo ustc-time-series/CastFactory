@@ -28,17 +28,18 @@ class CSVReader:
         if self.timestamp_col not in frame.columns:
             raise ValueError(f"CSV timestamp column '{self.timestamp_col}' not found")
         timestamps = pd.DatetimeIndex(pd.to_datetime(frame[self.timestamp_col]))
-        value_columns = [column for column in frame.columns if column != self.timestamp_col]
-        if not value_columns:
+        available_columns = [column for column in frame.columns if column != self.timestamp_col]
+        if not available_columns:
             raise ValueError("CSVReader requires at least one value column")
         if not self.target_channels:
-            self.target_channels = [value_columns[0]]
-        missing_targets = set(self.target_channels) - set(value_columns)
+            self.target_channels = [available_columns[0]]
+        missing_targets = set(self.target_channels) - set(available_columns)
         if missing_targets:
             raise ValueError(f"target channels not found in CSV: {sorted(missing_targets)}")
-        missing_covariates = set(self.covariate_channels) - set(value_columns)
+        missing_covariates = set(self.covariate_channels) - set(available_columns)
         if missing_covariates:
             raise ValueError(f"covariate channels not found in CSV: {sorted(missing_covariates)}")
+        value_columns = list(dict.fromkeys([*self.target_channels, *self.covariate_channels]))
         return TSRecord(
             values=frame[value_columns].to_numpy(dtype=float),
             timestamps=timestamps,

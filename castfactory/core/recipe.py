@@ -22,6 +22,7 @@ class RecipeConfig:
     representation: Dict[str, Any] = field(default_factory=dict)
     model: Dict[str, Any] = field(default_factory=dict)
     training: Dict[str, Any] = field(default_factory=dict)
+    rollout: Dict[str, Any] = field(default_factory=dict)
     inference: Dict[str, Any] = field(default_factory=dict)
     evaluation: Dict[str, Any] = field(default_factory=dict)
     trace: Dict[str, Any] = field(default_factory=dict)
@@ -31,11 +32,23 @@ class RecipeConfig:
             raise ValueError("recipe.experiment.name is required")
         self.experiment.setdefault("seed", 42)
         self.experiment.setdefault("stage", "sft")
+        stage = str(self.experiment["stage"]).lower()
+        if stage not in {"cpt", "sft", "rlvr"}:
+            raise ValueError("recipe.experiment.stage must be one of: cpt, sft, rlvr")
+        self.experiment["stage"] = stage
         self.trace.setdefault("save_recipe", True)
         self.trace.setdefault("save_prompt", True)
         self.trace.setdefault("save_response", True)
         self.trace.setdefault("save_parsed", True)
         self.trace.setdefault("save_artifacts", True)
+        workflow = self.rollout.get("workflow")
+        if stage == "rlvr" and workflow:
+            workflow_name = str(workflow.get("name", "single_turn")).lower()
+            if workflow_name != "single_turn":
+                raise ValueError(
+                    "RLVR currently only supports single_turn rollout workflow; "
+                    f"got '{workflow_name}'"
+                )
 
     @classmethod
     def from_file(cls, path: str | Path) -> "RecipeConfig":
@@ -54,6 +67,7 @@ class RecipeConfig:
             representation=_dict(mapping.get("representation")),
             model=_dict(mapping.get("model")),
             training=_dict(mapping.get("training")),
+            rollout=_dict(mapping.get("rollout")),
             inference=_dict(mapping.get("inference")),
             evaluation=_dict(mapping.get("evaluation")),
             trace=_dict(mapping.get("trace")),
@@ -66,6 +80,7 @@ class RecipeConfig:
             "representation": dict(self.representation),
             "model": dict(self.model),
             "training": dict(self.training),
+            "rollout": dict(self.rollout),
             "inference": dict(self.inference),
             "evaluation": dict(self.evaluation),
             "trace": dict(self.trace),
