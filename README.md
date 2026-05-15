@@ -5,10 +5,6 @@ It is designed to organize CPT, SFT, and RLVR experiments with explicit recipes,
 data processing, structured forecast parsing, verifiable rewards, and reproducible trace
 artifacts.
 
-The current codebase is an active research prototype. The main implemented path targets
-single-turn forecasting workflows on timestamped time-series data, with ETTh1 examples for
-Qwen-style causal language models.
-
 ## Highlights
 
 - **Recipe-first experiments**: data, representation, model, training stage, reward, evaluation,
@@ -255,44 +251,3 @@ trend-aware and seasonality-aware decomposition rewards, so that future experime
 not only pointwise error, but also whether a model captures trend direction and periodic
 structure. These decomposition rewards should plug into the same reward adapter path as the
 existing format and numerical rewards.
-
-## 4-GPU Server Examples
-
-Static 4-GPU recipes are provided for Qwen3-1.7B-style local checkpoints:
-
-```bash
-bash scripts/server_cpt_4gpu.sh
-bash scripts/server_sft_4gpu.sh
-bash scripts/server_rlvr_4gpu.sh
-```
-
-The scripts use CLI overrides for machine-specific paths and training settings. The RLVR server
-script first asks CastFactory to prepare verl artifacts, then executes the generated
-`launch_command.txt`.
-
-## Testing
-
-Run the standard-library test suite:
-
-```bash
-python3 -m unittest discover -s tests -v
-```
-
-Compile-check the package:
-
-```bash
-PYTHONPYCACHEPREFIX=/tmp/castfactory_pycache python3 -m compileall castfactory
-```
-
-With development dependencies installed:
-
-```bash
-python -m pytest tests -q
-python -m ruff check castfactory tests
-```
-
-## Current Boundaries
-
-CastFactory currently focuses on single-turn CPT/SFT/RLVR infrastructure for LLM-driven time
-series forecasting. It does not aim to provide a broad model zoo, a web UI, AutoML, or multi-turn
-agent workflows in the current MVP scope.
