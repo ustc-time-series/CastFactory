@@ -16,8 +16,8 @@ class RLVRTrainer:
             return {
                 "status": "skipped",
                 "reason": "No RLVR backend configured",
-                "num_prompts": len(self.dataset),
+                "num_rows": len(self.dataset),
             }
-        if hasattr(self.backend, "run"):
-            return dict(self.backend.run(self.dataset.prompts(), self.rewards) or {})
-        return dict(self.backend(self.dataset.prompts(), self.rewards) or {})
+        if hasattr(self.backend, "fit"):
+            return dict(self.backend.fit(self.dataset, self.rewards) or {})
+        return dict(self.backend(self.dataset, self.rewards) or {})

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 
-class TransformersSFTBackend:
+class TransformersCPTBackend:
     def __init__(
         self,
         model=None,
@@ -12,65 +12,28 @@ class TransformersSFTBackend:
         trainer_cls=None,
         training_args_cls=None,
         data_collator_cls=None,
-        max_length: int | None = None,
-        max_seq_length: int | None = None,
-        max_prompt_length: int = 4096,
-        max_response_length: int = 8192,
-        truncation_side: str = "left",
+        max_length: int = 2048,
         **default_train_args,
     ):
-        if max_length is not None and max_seq_length is not None and max_length != max_seq_length:
-            raise ValueError("max_length and max_seq_length must match when both are set")
-        if max_seq_length is not None:
-            max_length = max_seq_length
-        if max_length is not None and max_length <= 0:
+        if max_length <= 0:
             raise ValueError("max_length must be positive")
-        if max_prompt_length <= 0:
-            raise ValueError("max_prompt_length must be positive")
-        if max_response_length <= 0:
-            raise ValueError("max_response_length must be positive")
-        if truncation_side not in {"left", "right"}:
-            raise ValueError("truncation_side must be 'left' or 'right'")
         self.model = model
         self.tokenizer = tokenizer
         self.trainer_cls = trainer_cls
         self.training_args_cls = training_args_cls
         self.data_collator_cls = data_collator_cls
-        self.max_prompt_length = max_prompt_length
-        self.max_response_length = max_response_length
-        self.max_length = max_length or (max_prompt_length + max_response_length + 1)
-        if self.max_length <= 0:
-            raise ValueError("max_length must be positive")
-        self.truncation_side = truncation_side
+        self.max_length = max_length
         self.default_train_args = dict(default_train_args)
 
     def prepare_dataset(self, train_dataset: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
         prepared = []
         for row in train_dataset:
-            prompt = str(row["input"])
-            output = str(row["output"])
-            prompt_ids = self._tokenize_text(prompt, self.max_prompt_length)
-            response_ids = self._tokenize_text(output, self.max_response_length)
-            eos_ids = self._eos_token_ids()
-            if eos_ids:
-                response_budget = max(self.max_response_length - len(eos_ids), 0)
-                response_ids = response_ids[:response_budget] + eos_ids
-            input_ids = prompt_ids + response_ids
-            if len(input_ids) > self.max_length:
-                overflow = len(input_ids) - self.max_length
-                if overflow >= len(prompt_ids):
-                    raise ValueError(
-                        "SFT response tokens exceed max_length; increase max_length or "
-                        "max_response_length so labels are not truncated"
-                    )
-                prompt_ids = self._truncate_ids(prompt_ids, len(prompt_ids) - overflow)
-                input_ids = prompt_ids + response_ids
-            labels = [-100] * len(prompt_ids) + list(response_ids)
+            ids = self._tokenize_text(str(row["text"]))[: self.max_length]
             prepared.append(
                 {
-                    "input_ids": input_ids,
-                    "attention_mask": [1] * len(input_ids),
-                    "labels": labels,
+                    "input_ids": ids,
+                    "attention_mask": [1] * len(ids),
+                    "labels": list(ids),
                     "metadata": dict(row.get("metadata", {})),
                 }
             )
@@ -88,7 +51,7 @@ class TransformersSFTBackend:
             self.tokenizer = tokenizer
         model = model or self.model
         if model is None:
-            raise ValueError("TransformersSFTBackend.fit requires a model")
+            raise ValueError("TransformersCPTBackend.fit requires a model")
         self._ensure_pad_token()
         tokenized_dataset = self.prepare_dataset(train_dataset)
         trainer_dataset = self._training_features(tokenized_dataset)
@@ -101,7 +64,7 @@ class TransformersSFTBackend:
         except ImportError as exc:
             if "accelerate" in str(exc):
                 raise ImportError(
-                    "TransformersSFTBackend requires the CastFactory training extra "
+                    "TransformersCPTBackend requires the CastFactory training extra "
                     "('castfactory[train]') with accelerate>=0.26.0."
                 ) from exc
             raise
@@ -138,7 +101,7 @@ class TransformersSFTBackend:
 
     def _require_tokenizer(self):
         if self.tokenizer is None:
-            raise ValueError("TransformersSFTBackend requires a tokenizer")
+            raise ValueError("TransformersCPTBackend requires a tokenizer")
         return self.tokenizer
 
     def _ensure_pad_token(self) -> None:
@@ -160,7 +123,7 @@ class TransformersSFTBackend:
             from transformers import DataCollatorForSeq2Seq, Trainer, TrainingArguments
         except ImportError as exc:
             raise ImportError(
-                "TransformersSFTBackend requires the optional 'transformers' dependency"
+                "TransformersCPTBackend requires the optional 'transformers' dependency"
             ) from exc
         return (
             self.trainer_cls or Trainer,
@@ -168,29 +131,7 @@ class TransformersSFTBackend:
             self.data_collator_cls or DataCollatorForSeq2Seq,
         )
 
-    def _tokenize_text(self, text: str, max_length: int) -> list[int]:
+    def _tokenize_text(self, text: str) -> list[int]:
         tokenizer = self._require_tokenizer()
-        try:
-            encoded = tokenizer(text, truncation=False, max_length=None)
-        except TypeError:
-            encoded = tokenizer(text, truncation=False)
-        return self._truncate_ids(list(encoded["input_ids"]), max_length)
-
-    def _eos_token_ids(self) -> list[int]:
-        tokenizer = self._require_tokenizer()
-        eos_token_id = getattr(tokenizer, "eos_token_id", None)
-        if eos_token_id is not None:
-            return [int(eos_token_id)]
-        eos_token = getattr(tokenizer, "eos_token", None)
-        if not eos_token:
-            return []
-        return self._tokenize_text(str(eos_token), max_length=128)
-
-    def _truncate_ids(self, ids: list[int], max_length: int) -> list[int]:
-        if max_length < 0:
-            raise ValueError("max_length must be non-negative")
-        if len(ids) <= max_length:
-            return ids
-        if self.truncation_side == "left":
-            return ids[-max_length:] if max_length else []
-        return ids[:max_length]
+        encoded = tokenizer(text, truncation=False)
+        return list(encoded["input_ids"])

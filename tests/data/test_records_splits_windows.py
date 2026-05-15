@@ -49,6 +49,18 @@ class RecordsSplitsWindowsTests(unittest.TestCase):
         self.assertEqual(len(split.test), 4)
         self.assertLess(split.train.timestamps[-1], split.val.timestamps[0])
 
+    def test_ratio_splitter_respects_7_1_2_boundaries(self):
+        from castfactory.data.splits import RatioSplitter
+
+        record = self.make_record()
+        split = RatioSplitter(ratios=(0.7, 0.1, 0.2)).split(record)
+
+        self.assertEqual(len(split.train), 8)
+        self.assertEqual(len(split.val), 1)
+        self.assertEqual(len(split.test), 3)
+        self.assertLess(split.train.timestamps[-1], split.val.timestamps[0])
+        self.assertLess(split.val.timestamps[-1], split.test.timestamps[0])
+
     def test_window_builder_creates_visibility_separated_samples(self):
         from castfactory.data.windows import WindowBuilder
 

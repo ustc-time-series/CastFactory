@@ -3,6 +3,7 @@ from castfactory.rewards.base import RewardResult
 from castfactory.rewards.calibration import CalibrationReward
 from castfactory.rewards.composite import CompositeReward
 from castfactory.rewards.format import FormatReward
+from castfactory.rewards.mse import MSEReward
 from castfactory.rewards.reasoning import ReasoningReward
 
 __all__ = [
@@ -10,6 +11,7 @@ __all__ = [
     "CalibrationReward",
     "CompositeReward",
     "FormatReward",
+    "MSEReward",
     "ReasoningReward",
     "RewardResult",
 ]

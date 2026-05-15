@@ -39,6 +39,43 @@ class ForecastParserTests(unittest.TestCase):
         self.assertTrue(result.success)
         np.testing.assert_allclose(result.point_forecast, np.array([[4.0], [5.5], [-6.0]]))
 
+    def test_think_answer_parser_extracts_numbers_from_answer_block(self):
+        from castfactory.parsers import ParseContext, ThinkAnswerForecastParser
+
+        parser = ThinkAnswerForecastParser()
+        result = parser.parse(
+            "<think>\nuse recent trend\n</think>\n"
+            "<answer>\n```\n1.0\n2.5\n3.0\n```\n</answer>",
+            ParseContext(
+                prediction_length=3,
+                num_channels=1,
+                output_schema="think_answer_array",
+                channel_names=["load"],
+            ),
+        )
+
+        self.assertTrue(result.success)
+        self.assertFalse(result.fallback_used)
+        np.testing.assert_allclose(result.point_forecast, np.array([[1.0], [2.5], [3.0]]))
+
+    def test_think_answer_parser_falls_back_when_answer_block_is_missing(self):
+        from castfactory.parsers import ParseContext, ThinkAnswerForecastParser
+
+        context = ParseContext(
+            prediction_length=2,
+            num_channels=1,
+            output_schema="think_answer_array",
+            channel_names=["load"],
+            observed_values=np.array([[10.0], [12.0]]),
+        )
+
+        result = ThinkAnswerForecastParser().parse("<think>missing answer</think>", context)
+
+        self.assertFalse(result.success)
+        self.assertTrue(result.fallback_used)
+        self.assertEqual(result.fallback_strategy, "last_value")
+        np.testing.assert_allclose(result.point_forecast, np.array([[12.0], [12.0]]))
+
     def test_parser_fallback_uses_last_observed_value(self):
         from castfactory.parsers import JSONForecastParser, ParseContext
 

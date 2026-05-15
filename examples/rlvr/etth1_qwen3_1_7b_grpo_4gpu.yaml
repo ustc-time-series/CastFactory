@@ -1,0 +1,92 @@
+experiment:
+  name: etth1_ot_qwen3_1_7b_grpo_4gpu
+  stage: rlvr
+  seed: 42
+
+data:
+  reader:
+    name: csv
+    path: ./castfactory/dataset/ETTh1/ETTh1.csv
+    timestamp_col: date
+    target_channels: [OT]
+  split:
+    type: ratio
+    ratios: [0.7, 0.1, 0.2]
+  window:
+    context_length: 96
+    prediction_length: 96
+    stride: 96
+
+representation:
+  name: markdown_table
+  significant_digits: 2
+
+model:
+  backbone:
+    name: hf_causal_lm
+    model_name: /home/zyt/LLM/Qwen3-1.7B
+    trust_remote_code: true
+
+training:
+  epochs: 1
+  batch_size: 16
+  checkpoint_dir: ./checkpoints/etth1_qwen3_1_7b_4gpu/etth1_ot_qwen_grpo
+  init_checkpoint: ./checkpoints/etth1_qwen3_1_7b_4gpu/etth1_ot_qwen_sft
+  instruction_template_file: ./etth1_qwen_grpo_prompt.txt
+  backend:
+    name: verl
+    algorithm: grpo
+    inference_engine: vllm
+    num_generations: 8
+    verl:
+      data:
+        train_batch_size: 16
+        max_prompt_length: 4096
+        max_response_length: 8192
+        filter_overlong_prompts: true
+        truncation: error
+      algorithm:
+        use_kl_in_reward: false
+      actor_rollout_ref:
+        model:
+          use_remove_padding: true
+          enable_gradient_checkpointing: true
+        actor:
+          optim:
+            lr: 1.0e-6
+          ppo_mini_batch_size: 16
+          ppo_micro_batch_size_per_gpu: 1
+          use_kl_loss: true
+          kl_loss_coef: 0.001
+          kl_loss_type: low_var_kl
+          entropy_coeff: 0
+          fsdp_config:
+            param_offload: false
+            optimizer_offload: false
+        rollout:
+          name: vllm
+          log_prob_micro_batch_size_per_gpu: 1
+          tensor_model_parallel_size: 1
+          gpu_memory_utilization: 0.6
+          n: 8
+        ref:
+          log_prob_micro_batch_size_per_gpu: 1
+          fsdp_config:
+            param_offload: true
+      trainer:
+        critic_warmup: 0
+        logger: [console]
+        project_name: castfactory_etth1_qwen3_1_7b
+        experiment_name: etth1_ot_qwen3_1_7b_grpo_4gpu
+        n_gpus_per_node: 4
+        nnodes: 1
+        save_freq: 20
+        test_freq: 5
+        total_epochs: 1
+  rewards:
+    - name: format
+    - name: mse
+      temperature: 10.0
+
+trace:
+  run_root: ./runs/etth1_qwen3_1_7b_4gpu

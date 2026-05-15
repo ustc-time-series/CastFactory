@@ -47,6 +47,21 @@ class RunStoreTests(unittest.TestCase):
         self.assertEqual(frame.loc[0, "pred"], 4.0)
         self.assertIn("parse failed", errors)
 
+    def test_run_store_writes_stage_metadata(self):
+        from castfactory.trace import RunStore
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = RunStore(root=tmp, run_id="run")
+            path = store.save_stage_metadata(
+                {
+                    "stage": "sft",
+                    "input_checkpoint": "checkpoints/cpt",
+                    "output_checkpoint": "checkpoints/sft",
+                }
+            )
+
+        self.assertEqual(path.name, "stage_metadata.json")
+
 
 if __name__ == "__main__":
     unittest.main()

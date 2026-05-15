@@ -110,6 +110,15 @@ class TextRepresentationTests(unittest.TestCase):
         self.assertEqual(model_input.token_ids.tolist(), [101, 102, 103])
         self.assertEqual(model_input.metadata["representation"], "discrete_token")
 
+    def test_markdown_table_representation_formats_time_series_as_table(self):
+        from castfactory.representation import MarkdownTableRepresentation
+
+        model_input = MarkdownTableRepresentation(significant_digits=2).encode(self.make_sample())
+
+        self.assertIn("| timestamp | load |", model_input.text_prompt)
+        self.assertIn("| 2022-01-01 00:00:00 | 1.00 |", model_input.text_prompt)
+        self.assertIn("| 2022-01-01 02:00:00 | 3.00 |", model_input.text_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
