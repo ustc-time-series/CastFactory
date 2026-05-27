@@ -1,21 +1,35 @@
-<h1 align="center">
-  <img src="./image/logo.png" alt="CastFactory" height="40" />
-  : Towards a Large Language Model Training Framework for Time Series Forecasting
-</h1>
+<h1 align="center">CastFactory</h1>
+
+<p align="center">
+  <strong>Towards a Large Language Model Training Framework for Time Series Forecasting</strong>
+</p>
 
 <p align="center">
   <a href="https://deepwiki.com/ustc-time-series/CastFactory"><img src="https://devin.ai/assets/deepwiki-badge.png" alt="Ask DeepWiki.com" height="20"/></a>
   <a href="https://github.com/ustc-time-series/CastFactory/stargazers"><img src="https://img.shields.io/github/stars/ustc-time-series/CastFactory" alt="GitHub Repo stars"></a>
   <a href="https://github.com/ustc-time-series/CastFactory/network/members"><img src="https://img.shields.io/github/forks/ustc-time-series/CastFactory" alt="GitHub forks"></a>
+  <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python 3.9+">
+  <img src="https://img.shields.io/badge/stages-CPT%20%7C%20SFT%20%7C%20RLVR-6f42c1" alt="CPT SFT RLVR">
+  <img src="https://img.shields.io/badge/verl-0.7.1-00a67e" alt="verl 0.7.1">
+</p>
+
+<p align="center"><img src="./image/logo.png" width="600px" alt="CastFactory Logo" /></p>
+
+<p align="center">
+  <a href="#news">News</a> |
+  <a href="#overview">Overview</a> |
+  <a href="#architecture">Architecture</a> |
+  <a href="#environment-setup">Setup</a> |
+  <a href="#quick-start">Quick Start</a> |
+  <a href="#example-recipes">Examples</a> |
+  <a href="#acknowledgements">Acknowledgements</a>
 </p>
 
 ## News
 
-- **2026.05.27**: 🚀 Added Cast-R1-style example integration and support for agentic time-series RLVR training!
-- **2026.05.15**: ✨ Added Time-R1 example code, RLVR training support, and the core CPT and SFT training implementations.
-- **2026.04.29**: 🎉 Released CastFactory — *Towards a Large Language Model Training Framework for Time Series Forecasting*!
-
-<p align="center"><img src="./image/bar.png" width="800px" alt="CastFactory Bar" /></p>
+- **2026.05.27**: Added Cast-R1-style example integration and agentic time-series RLVR training support.
+- **2026.05.15**: Added Time-R1-style staged CPT/SFT/RLVR examples, RLVR training support, and the core CPT and SFT training implementations.
+- **2026.04.29**: Released CastFactory: *Towards a Large Language Model Training Framework for Time Series Forecasting*.
 
 ## Overview
 
@@ -24,14 +38,60 @@ organizes data processing, time-series representation, model training, verifiabl
 evaluation, and trace artifacts around explicit YAML recipes, so CPT, SFT, and RLVR experiments can
 be reproduced and extended with a consistent workflow.
 
-The framework is designed to connect two lines of work: Time-R1-style staged training for
-forecasting LLMs, and Cast-R1-style tool-augmented sequential decision policies. For RLVR,
-CastFactory prepares verl-compatible rollout datasets, reward entrypoints, config files, and launch
-commands for GRPO/vLLM training while keeping the external verl runtime outside this repository.
+The framework connects two lines of work: Time-R1-style staged training for forecasting LLMs and
+Cast-R1-style tool-augmented sequential decision policies. For RLVR, CastFactory prepares
+verl-compatible rollout datasets, reward entrypoints, config files, agent-loop configs, and launch
+commands while keeping the external verl runtime outside this repository.
 
 <p align="center">
-  <img src="./image/main.png" alt="CastFactory homepage overview placeholder" width="900">
+  <img src="./image/main.png" alt="CastFactory workflow overview" width="900">
 </p>
+
+### Capability Snapshot
+
+| Area | Current support |
+|---|---|
+| Experiment control | YAML recipes, CLI runner, dotlist overrides, stage metadata |
+| Data pipeline | CSV reader, timestamp/ratio split, rolling windows, leakage checks, train-only normalization utilities |
+| Representations | Statistics, textual summaries, context prompts, Markdown tables, discrete tokens, numerical patches, hybrid prompts |
+| Training stages | CPT, SFT, RLVR through `Experiment.fit()` |
+| Local training backend | HuggingFace Transformers backends for CPT and SFT |
+| RLVR export | verl 0.7.1-style GRPO/vLLM config, rollout JSONL, reward entrypoint, launch command |
+| Agentic RLVR | Native verl AgentLoop config, Cast-R1-style tools, timestamp/value ground truth, univariate workflow |
+| Evaluation | Standard, rolling, and zero-shot evaluators with point metrics |
+| Traces | Automatic recipe/metrics/predictions/report/stage metadata; `RunStore` helpers for prompts, responses, parsed rows, and errors |
+
+## Architecture
+
+CastFactory is organized around one explicit contract: a recipe describes the full experiment, and
+`Experiment` wires the selected components together.
+
+```text
+YAML recipe
+  -> RecipeConfig validation and defaults
+  -> CSV reader + timestamp/ratio split + rolling windows
+  -> Representation adapter
+  -> CPTDataset / SFTDataset / RLVRDataset
+  -> Trainer + backend
+  -> Evaluation, reward, and trace artifacts
+```
+
+For RLVR, the path branches by rollout workflow:
+
+```text
+single_turn
+  -> text prompt rows
+  -> rollout_dataset.jsonl
+  -> verl_config.yaml
+  -> castfactory.training.verl_reward_adapter:compute_score
+
+time_series_agent
+  -> raw chat rows
+  -> agent_name: time_series_forecast_agent
+  -> Cast-R1-style timestamp/value ground truth
+  -> agent_loop_config.yaml
+  -> native verl AgentLoop with time-series tools
+```
 
 ## Highlights
 
@@ -39,8 +99,8 @@ commands for GRPO/vLLM training while keeping the external verl runtime outside 
   rollout, and trace behavior are described in YAML recipes.
 - **Three-stage training flow**: `cpt`, `sft`, and `rlvr` are first-class experiment stages in
   `Experiment.fit()`.
-- **Leakage-aware data layer**: CSV reading, timestamp or ratio split, rolling windows, train-only
-  normalization, and visibility-separated `ForecastSample` objects.
+- **Leakage-aware data layer**: CSV reading, timestamp or ratio split, rolling windows, leakage
+  checks, train-only normalization utilities, and visibility-separated `ForecastSample` objects.
 - **Time-series representations**: textual statistics, context summaries, discrete tokens,
   numerical patches, hybrid prompts, and Markdown-table prompts.
 - **Forecast parsers**: JSON, array, timestamp/value, and `<think>/<answer>` parsers with fallback
@@ -49,8 +109,9 @@ commands for GRPO/vLLM training while keeping the external verl runtime outside 
   length, normalized MSE, change points, and season/trend structure.
 - **verl integration**: RLVR recipes can export rollout datasets, verl config files, reward
   entrypoints, agent-loop config files, and launch commands for GRPO/vLLM training.
-- **Trace artifacts**: runs can store recipe snapshots, predictions, parsed results, metrics,
-  errors, reports, and stage metadata.
+- **Trace artifacts**: `Experiment.evaluate()` writes recipe snapshots, metrics, predictions,
+  leaderboards, and reports; `Experiment.fit()` writes stage metadata; `RunStore` also exposes
+  helpers for prompts, responses, parsed rows, and errors.
 
 ## Repository Layout
 
@@ -78,7 +139,7 @@ tests/                 # unit tests by module area
 
 ## Environment Setup
 
-Install the package in editable mode:
+Install CastFactory in editable mode:
 
 ```bash
 python -m pip install -e .
@@ -90,7 +151,7 @@ Optional HuggingFace model loading:
 python -m pip install -e ".[hf]"
 ```
 
-Optional local training stack:
+Optional local CPT/SFT training stack:
 
 ```bash
 python -m pip install -e ".[train]"
@@ -108,9 +169,24 @@ Development tools:
 python -m pip install -e ".[dev]"
 ```
 
-For RLVR with verl/vLLM, install the corresponding external runtime in the target training
-environment. CastFactory prepares verl-compatible artifacts and reward entrypoints, but does not
-vendor the full verl runtime.
+### verl / vLLM Runtime
+
+RLVR recipes generate artifacts for an external verl runtime. Before running exported GRPO/vLLM
+launch commands, prepare a separate training environment with **verl 0.7.1** and its matching vLLM,
+Ray, CUDA, and PyTorch stack.
+
+CastFactory does not vendor verl. It writes the dataset, config, reward entrypoint, and launch
+command that should be executed in that preconfigured verl 0.7.1 environment.
+
+```bash
+python -c "import verl; print(getattr(verl, '__version__', 'unknown'))"
+```
+
+Expected version:
+
+```text
+0.7.1
+```
 
 ## Quick Start
 
@@ -120,11 +196,16 @@ Load a recipe:
 python -m castfactory.cli.run examples/sft/etth1_qwen_sft.yaml
 ```
 
-Run a training stage:
+Run CPT or SFT locally with the configured Transformers backend:
 
 ```bash
 python -m castfactory.cli.run examples/cpt/etth1_qwen_cpt.yaml --mode fit
 python -m castfactory.cli.run examples/sft/etth1_qwen_sft.yaml --mode fit
+```
+
+Prepare RLVR artifacts for verl 0.7.1:
+
+```bash
 python -m castfactory.cli.run examples/rlvr/etth1_qwen_grpo.yaml --mode fit
 ```
 
@@ -137,7 +218,14 @@ python -m castfactory.cli.run examples/sft/etth1_qwen_sft.yaml --mode fit \
   training.args.learning_rate=2.0e-4
 ```
 
-## Training Example Guide
+## Example Recipes
+
+| Stage | Recipe | Purpose | Output |
+|---|---|---|---|
+| CPT | `examples/cpt/etth1_qwen_cpt.yaml` | Convert ETTh1 windows into causal LM text streams | `./checkpoints/etth1_ot_qwen_cpt` |
+| SFT | `examples/sft/etth1_qwen_sft.yaml` | Build single-turn forecasting instruction data from CPT checkpoint | `./checkpoints/etth1_ot_qwen_sft` |
+| RLVR | `examples/rlvr/etth1_qwen_grpo.yaml` | Prepare single-turn GRPO artifacts for verl 0.7.1 | `./checkpoints/etth1_ot_qwen_grpo/rlvr/` |
+| Agentic RLVR | `examples/rlvr/etth1_qwen3_1_7b_agentic_grpo_4gpu.yaml` | Prepare Cast-R1-style tool-augmented AgentLoop artifacts | `./checkpoints/etth1_qwen3_1_7b_4gpu/etth1_ot_qwen_agentic_grpo/rlvr/` |
 
 The basic ETTh1 pipeline is checkpoint-chained:
 
@@ -236,7 +324,7 @@ training:
 
 RLVR supports both the default single-turn rollout workflow and a `time_series_agent` workflow that
 uses verl native AgentLoop for multi-turn tool use. CastFactory builds rollout rows from forecasting
-samples, exports them for verl, and connects model outputs back to task-specific reward
+samples, exports them for verl 0.7.1, and connects model outputs back to task-specific reward
 computation.
 
 The current ETTh1 GRPO example uses:
@@ -278,8 +366,8 @@ rollout:
     local_fallback: arima_then_last_value
 ```
 
-This path is currently univariate. It writes raw chat prompts, `agent_name:
-time_series_forecast_agent`, Cast-R1-style timestamp/value ground truth, and a native verl
+This path is currently univariate. It writes raw chat prompts, `agent_name: time_series_forecast_agent`,
+Cast-R1-style timestamp/value ground truth, and a native verl
 `agent_loop_config.yaml`. The `predict_time_series` tool tries the configured HTTP model service
 first and falls back locally to ARIMA, then last-value forecasting.
 
@@ -321,3 +409,41 @@ and penalize invalid outputs before computing numerical rewards.
 For prediction correctness, CastFactory currently includes accuracy-oriented rewards such as
 `AccuracyReward`, `CalibrationReward`, and `MSEReward`. The Cast-R1-style agentic path also includes
 length, normalized MSE, change-point, and season/trend reward components.
+
+## Testing
+
+Use the standard-library test runner:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+After installing development dependencies:
+
+```bash
+python -m pytest tests -q
+python -m ruff check castfactory tests
+```
+
+## Current Scope
+
+- `Experiment` currently supports CSV reader recipes and timestamp/ratio split recipes.
+- The `time_series_agent` RLVR workflow currently supports univariate forecasting samples.
+- RLVR `fit` prepares verl artifacts by default; execute them in a configured verl 0.7.1 runtime.
+- The included ETTh1 examples are small, reproducible templates rather than benchmark claims.
+
+## Acknowledgements
+
+CastFactory is developed with thanks to the following open-source projects and research lines:
+
+- [Time-R1](https://github.com/ustc-time-series/Time-R1), for the staged reasoning-oriented
+  training direction for time-series forecasting LLMs.
+- [Cast-R1](https://github.com/musihai/eeh1_test), for tool-augmented sequential decision policies
+  for time-series forecasting.
+- [verl](https://github.com/verl-project/verl), for the RL post-training runtime interfaces that
+  CastFactory targets when exporting RLVR artifacts.
+
+## License
+
+No license file is included in this repository yet. Add a `LICENSE` file before public reuse,
+redistribution, or packaging.
