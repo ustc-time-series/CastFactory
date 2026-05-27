@@ -442,8 +442,3 @@ CastFactory is developed with thanks to the following open-source projects and r
   for time-series forecasting.
 - [verl](https://github.com/verl-project/verl), for the RL post-training runtime interfaces that
   CastFactory targets when exporting RLVR artifacts.
-
-## License
-
-No license file is included in this repository yet. Add a `LICENSE` file before public reuse,
-redistribution, or packaging.
