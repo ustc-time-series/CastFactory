@@ -9,6 +9,8 @@
   <a href="https://github.com/ustc-time-series/CastFactory/network/members"><img src="https://img.shields.io/github/forks/ustc-time-series/CastFactory" alt="GitHub forks"></a>
 </p>
 
+<p align="center"><img src="./image/bar.png" width="600px" alt="CastFactory Bar" /></p>
+
 ## News
 
 - **2026.05.27**: 🚀 Added Cast-R1-style example integration and support for agentic time-series RLVR training!
