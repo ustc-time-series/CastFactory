@@ -27,9 +27,9 @@
 
 ## News
 
-- **2026.05.27**: Added Cast-R1-style example integration and agentic time-series RLVR training support.
-- **2026.05.15**: Added Time-R1-style staged CPT/SFT/RLVR examples, RLVR training support, and the core CPT and SFT training implementations.
-- **2026.04.29**: Released CastFactory: *Towards a Large Language Model Training Framework for Time Series Forecasting*.
+- **2026.05.27**: 🚀 Added Cast-R1-style example integration and support for agentic time-series RLVR training!
+- **2026.05.15**: ✨ Added Time-R1 example code, RLVR training support, and the core CPT and SFT training implementations.
+- **2026.04.29**: 🎉 Released CastFactory — *Towards a Large Language Model Training Framework for Time Series Forecasting*!
 
 ## Overview
 
