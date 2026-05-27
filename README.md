@@ -1,4 +1,5 @@
-<h1 align="center">CastFactory</h1>
+<h1 align="center"><p align="center"><img src="./image/logo.png" width="600px" alt="CastFactory Logo" /></p>
+</h1>
 
 <p align="center">
   <strong>Towards a Large Language Model Training Framework for Time Series Forecasting</strong>
@@ -13,7 +14,6 @@
   <img src="https://img.shields.io/badge/verl-0.7.1-00a67e" alt="verl 0.7.1">
 </p>
 
-<p align="center"><img src="./image/logo.png" width="600px" alt="CastFactory Logo" /></p>
 
 <p align="center">
   <a href="#news">News</a> |
