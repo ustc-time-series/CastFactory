@@ -1,25 +1,52 @@
-# CastFactory
+<h1 align="center"> CastFactory: Towards a Large Language Model Training Framework for Time Series Forecasting </h1>
 
-CastFactory is a recipe-centric research framework for LLM-driven time series forecasting.
-It is designed to organize CPT, SFT, and RLVR experiments with explicit recipes, leakage-aware
-data processing, structured forecast parsing, verifiable rewards, and reproducible trace
-artifacts.
+
+<p align="center">
+  <a href="https://deepwiki.com/ustc-time-series/CastFactory"><img src="https://devin.ai/assets/deepwiki-badge.png" alt="Ask DeepWiki.com" height="20"/></a>
+  <a href="https://github.com/ustc-time-series/CastFactory/stargazers"><img src="https://img.shields.io/github/stars/ustc-time-series/CastFactory" alt="GitHub Repo stars"></a>
+  <a href="https://github.com/ustc-time-series/CastFactory/network/members"><img src="https://img.shields.io/github/forks/ustc-time-series/CastFactory" alt="GitHub forks"></a>
+</p>
+
+<p align="center"><img src="./image/logo.png" width="600px" alt="CastFactory Logo" /></p>
+
+## News
+
+- **2026.05.27**: 🚀 Added Cast-R1-style example integration and support for agentic time-series RLVR training!
+- **2026.05.15**: ✨ Added Time-R1 example code, RLVR training support, and the core CPT and SFT training implementations.
+- **2026.04.29**: 🎉 Released CastFactory — *Towards a Large Language Model Training Framework for Time Series Forecasting*!
+
+## Overview
+
+CastFactory is a recipe-centric research framework for LLM-driven time-series forecasting. It
+organizes data processing, time-series representation, model training, verifiable rewards,
+evaluation, and trace artifacts around explicit YAML recipes, so CPT, SFT, and RLVR experiments can
+be reproduced and extended with a consistent workflow.
+
+The framework is designed to connect two lines of work: Time-R1-style staged training for
+forecasting LLMs, and Cast-R1-style tool-augmented sequential decision policies. For RLVR,
+CastFactory prepares verl-compatible rollout datasets, reward entrypoints, config files, and launch
+commands for GRPO/vLLM training while keeping the external verl runtime outside this repository.
+
+<p align="center">
+  <img src="./image/main.png" alt="CastFactory homepage overview placeholder" width="900">
+</p>
 
 ## Highlights
 
 - **Recipe-first experiments**: data, representation, model, training stage, reward, evaluation,
-  and trace behavior are described in YAML recipes.
+  rollout, and trace behavior are described in YAML recipes.
 - **Three-stage training flow**: `cpt`, `sft`, and `rlvr` are first-class experiment stages in
   `Experiment.fit()`.
 - **Leakage-aware data layer**: CSV reading, timestamp or ratio split, rolling windows, train-only
   normalization, and visibility-separated `ForecastSample` objects.
 - **Time-series representations**: textual statistics, context summaries, discrete tokens,
   numerical patches, hybrid prompts, and Markdown-table prompts.
-- **Forecast parsers**: JSON, array, and `<think>/<answer>` parsers with fallback behavior.
-- **Verifiable rewards**: format, accuracy, calibration, reasoning, and MSE-based rewards, with
-  extensible reward composition for RLVR.
+- **Forecast parsers**: JSON, array, timestamp/value, and `<think>/<answer>` parsers with fallback
+  behavior.
+- **Verifiable rewards**: format, accuracy, calibration, reasoning, MSE, and agentic rewards for
+  length, normalized MSE, change points, and season/trend structure.
 - **verl integration**: RLVR recipes can export rollout datasets, verl config files, reward
-  entrypoints, and launch commands for GRPO/vLLM training.
+  entrypoints, agent-loop config files, and launch commands for GRPO/vLLM training.
 - **Trace artifacts**: runs can store recipe snapshots, predictions, parsed results, metrics,
   errors, reports, and stage metadata.
 
@@ -36,18 +63,18 @@ castfactory/
   representation/      # time-series to LLM input representations
   rewards/             # verifiable reward functions
   trace/               # run artifact storage
-  training/            # CPT/SFT/RLVR datasets, trainers, and backends
+  training/            # CPT/SFT/RLVR datasets, trainers, backends, agentic tools
 
 examples/
   cpt/                 # ETTh1 CPT recipes
   sft/                 # ETTh1 SFT recipes
-  rlvr/                # ETTh1 GRPO/RLVR recipes and prompt template
+  rlvr/                # ETTh1 GRPO/RLVR recipes, Cast-R1-style agentic recipe, prompt template
 
-scripts/               # 4-GPU server launch helpers
+scripts/               # server and 4-GPU launch helpers
 tests/                 # unit tests by module area
 ```
 
-## Installation
+## Environment Setup
 
 Install the package in editable mode:
 
@@ -99,7 +126,18 @@ python -m castfactory.cli.run examples/sft/etth1_qwen_sft.yaml --mode fit
 python -m castfactory.cli.run examples/rlvr/etth1_qwen_grpo.yaml --mode fit
 ```
 
-The example pipeline is checkpoint-chained:
+Command-line dotlist overrides are supported:
+
+```bash
+python -m castfactory.cli.run examples/sft/etth1_qwen_sft.yaml --mode fit \
+  model.backbone.model_name=Qwen/Qwen2.5-1.5B \
+  training.args.num_train_epochs=1 \
+  training.args.learning_rate=2.0e-4
+```
+
+## Training Example Guide
+
+The basic ETTh1 pipeline is checkpoint-chained:
 
 ```text
 examples/cpt/etth1_qwen_cpt.yaml
@@ -114,13 +152,22 @@ examples/rlvr/etth1_qwen_grpo.yaml
   -> ./checkpoints/etth1_ot_qwen_grpo
 ```
 
-Command-line dotlist overrides are supported:
+For larger Qwen3-1.7B 4-GPU examples, use:
+
+```text
+examples/cpt/etth1_qwen3_1_7b_cpt_4gpu.yaml
+examples/sft/etth1_qwen3_1_7b_sft_4gpu.yaml
+examples/rlvr/etth1_qwen3_1_7b_grpo_4gpu.yaml
+examples/rlvr/etth1_qwen3_1_7b_agentic_grpo_4gpu.yaml
+```
+
+The helper scripts mirror these recipes:
 
 ```bash
-python -m castfactory.cli.run examples/sft/etth1_qwen_sft.yaml --mode fit \
-  model.backbone.model_name=Qwen/Qwen2.5-1.5B \
-  training.args.num_train_epochs=1 \
-  training.args.learning_rate=2.0e-4
+bash scripts/cpt.sh
+bash scripts/sft.sh
+bash scripts/rlvr.sh
+bash scripts/agentic_rlvr.sh
 ```
 
 ## CPT
@@ -185,10 +232,10 @@ training:
 
 ## RLVR
 
-RLVR supports both the default single-turn rollout workflow and a `time_series_agent` workflow
-that uses verl native AgentLoop for multi-turn tool use. CastFactory builds rollout rows from
-forecasting samples, exports them for verl, and connects model outputs back to task-specific
-reward computation.
+RLVR supports both the default single-turn rollout workflow and a `time_series_agent` workflow that
+uses verl native AgentLoop for multi-turn tool use. CastFactory builds rollout rows from forecasting
+samples, exports them for verl, and connects model outputs back to task-specific reward
+computation.
 
 The current ETTh1 GRPO example uses:
 
@@ -215,7 +262,7 @@ The generated reward entrypoint is:
 castfactory.training.verl_reward_adapter:compute_score
 ```
 
-For Cast-R1 style agentic training, add a workflow section to an RLVR recipe:
+For Cast-R1-style agentic training, add a workflow section to an RLVR recipe:
 
 ```yaml
 rollout:
@@ -230,7 +277,7 @@ rollout:
 ```
 
 This path is currently univariate. It writes raw chat prompts, `agent_name:
-time_series_forecast_agent`, Cast-R1 style timestamp/value ground truth, and a native verl
+time_series_forecast_agent`, Cast-R1-style timestamp/value ground truth, and a native verl
 `agent_loop_config.yaml`. The `predict_time_series` tool tries the configured HTTP model service
 first and falls back locally to ARIMA, then last-value forecasting.
 
@@ -265,16 +312,10 @@ reasoning and final prediction:
 </answer>
 ````
 
-`FormatReward` can validate both parse success and required structural blocks. If the response
-does not satisfy the expected reasoning/answer format, the reward adapter can short-circuit the
-sample and penalize invalid outputs before computing numerical rewards.
+`FormatReward` can validate both parse success and required structural blocks. If the response does
+not satisfy the expected reasoning/answer format, the reward adapter can short-circuit the sample
+and penalize invalid outputs before computing numerical rewards.
 
 For prediction correctness, CastFactory currently includes accuracy-oriented rewards such as
-`AccuracyReward`, `CalibrationReward`, and `MSEReward`. `MSEReward` maps unbounded MSE into a
-bounded scalar through a temperature parameter, which is useful for stabilizing RL training.
-
-The reward interface is intentionally extensible. The planned RLVR reward family also includes
-trend-aware and seasonality-aware decomposition rewards, so that future experiments can evaluate
-not only pointwise error, but also whether a model captures trend direction and periodic
-structure. These decomposition rewards should plug into the same reward adapter path as the
-existing format and numerical rewards.
+`AccuracyReward`, `CalibrationReward`, and `MSEReward`. The Cast-R1-style agentic path also includes
+length, normalized MSE, change-point, and season/trend reward components.
