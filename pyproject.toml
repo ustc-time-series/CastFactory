@@ -26,6 +26,12 @@ train = [
   "torch",
   "transformers",
   "peft",
+  "accelerate>=0.26.0",
+]
+agentic = [
+  "httpx",
+  "scipy",
+  "statsmodels",
 ]
 dev = [
   "pytest",

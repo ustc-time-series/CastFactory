@@ -67,6 +67,12 @@ Optional local training stack:
 python -m pip install -e ".[train]"
 ```
 
+Optional time-series agentic RL helpers:
+
+```bash
+python -m pip install -e ".[agentic]"
+```
+
 Development tools:
 
 ```bash
@@ -179,7 +185,8 @@ training:
 
 ## RLVR
 
-RLVR is implemented as a single-turn rollout workflow. CastFactory builds rollout rows from
+RLVR supports both the default single-turn rollout workflow and a `time_series_agent` workflow
+that uses verl native AgentLoop for multi-turn tool use. CastFactory builds rollout rows from
 forecasting samples, exports them for verl, and connects model outputs back to task-specific
 reward computation.
 
@@ -198,6 +205,7 @@ Running an RLVR recipe prepares artifacts under the configured checkpoint direct
 checkpoints/.../rlvr/
   rollout_dataset.jsonl
   verl_config.yaml
+  agent_loop_config.yaml  # only for rollout.workflow.name: time_series_agent
   launch_command.txt
 ```
 
@@ -206,6 +214,25 @@ The generated reward entrypoint is:
 ```text
 castfactory.training.verl_reward_adapter:compute_score
 ```
+
+For Cast-R1 style agentic training, add a workflow section to an RLVR recipe:
+
+```yaml
+rollout:
+  workflow:
+    name: time_series_agent
+    max_steps: 3
+    max_parallel_calls: 5
+    tool_parser_format: hermes
+    model_service_url: http://localhost:8994
+    prediction_models: [chronos2, arima, patchtst, itransformer]
+    local_fallback: arima_then_last_value
+```
+
+This path is currently univariate. It writes raw chat prompts, `agent_name:
+time_series_forecast_agent`, Cast-R1 style timestamp/value ground truth, and a native verl
+`agent_loop_config.yaml`. The `predict_time_series` tool tries the configured HTTP model service
+first and falls back locally to ARIMA, then last-value forecasting.
 
 ### Prompt, Parser, and Reward Design
 

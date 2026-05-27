@@ -380,6 +380,8 @@ class Experiment:
         raise ValueError(f"Leakage check found issues: {message}")
 
     def _build_rlvr_rows(self, samples) -> list[dict]:
+        if self._rlvr_workflow_name() == "time_series_agent":
+            return self._build_agentic_rlvr_rows(samples)
         representation = self._build_representation()
         instruction_template = self._resolve_instruction_template()
         rows = []
@@ -404,6 +406,81 @@ class Experiment:
                     "metadata": dict(sample.metadata),
                     "instruction": instruction,
                     "model_input_text": model_input.text_prompt or "",
+                }
+            )
+        return rows
+
+    def _build_agentic_rlvr_rows(self, samples) -> list[dict]:
+        rows = []
+        for index, sample in enumerate(samples):
+            if (
+                sample.observed_window.num_channels != 1
+                or sample.future_unknown_window.num_channels != 1
+            ):
+                raise ValueError(
+                    "time_series_agent RLVR workflow currently supports univariate samples only"
+                )
+            observed_values = sample.observed_window.values.tolist()
+            future_values = sample.future_unknown_window.values.tolist()
+            observed_timestamps = self._timestamp_strings(sample.observed_window.timestamps)
+            future_timestamps = self._timestamp_strings(sample.future_unknown_window.timestamps)
+            observed_text = self._format_timestamp_value_series(
+                sample.observed_window.timestamps,
+                sample.observed_window.values[:, 0],
+            )
+            ground_truth = self._format_timestamp_value_series(
+                sample.future_unknown_window.timestamps,
+                sample.future_unknown_window.values[:, 0],
+            )
+            sample_id = str(sample.metadata.get("sample_id", index))
+            channel_names = list(sample.future_unknown_window.channel_names)
+            prompt = [
+                {
+                    "role": "user",
+                    "content": (
+                        "You are a time-series forecasting agent. Use the available "
+                        "analysis and prediction tools before finalizing a forecast. "
+                        "Return the final answer as timestamp value lines inside "
+                        "<answer>...</answer>.\n\n"
+                        f"Forecast the next {sample.prediction_length} values for "
+                        f"channel '{channel_names[0]}'.\n"
+                        "Observed history:\n"
+                        f"{observed_text}\n\n"
+                        "Final answer format:\n"
+                        "YYYY-MM-DD HH:MM:SS value"
+                    ),
+                },
+            ]
+            extra_info = {
+                "index": sample_id,
+                "sample_id": sample_id,
+                "prediction_length": sample.prediction_length,
+                "channel_names": channel_names,
+                "observed_values": observed_values,
+                "observed_timestamps": observed_timestamps,
+                "future_timestamps": future_timestamps,
+                "label": future_values,
+                "cutoff_time": str(sample.cutoff_time),
+                "metadata": dict(sample.metadata),
+            }
+            rows.append(
+                {
+                    "data_source": "castfactory_agentic_rlvr",
+                    "prompt": prompt,
+                    "agent_name": "time_series_forecast_agent",
+                    "reward_model": {
+                        "style": "rule",
+                        "ground_truth": ground_truth,
+                    },
+                    "label": future_values,
+                    "prediction_length": sample.prediction_length,
+                    "channel_names": channel_names,
+                    "observed_values": observed_values,
+                    "cutoff_time": str(sample.cutoff_time),
+                    "sample_id": sample_id,
+                    "metadata": dict(sample.metadata),
+                    "model_input_text": observed_text,
+                    "extra_info": extra_info,
                 }
             )
         return rows
@@ -438,6 +515,13 @@ class Experiment:
                 built.append(MSEReward(temperature=float(config.get("temperature", 1.0))))
             elif name == "reasoning":
                 built.append(ReasoningReward(max_horizon_steps=prediction_length))
+            elif self._rlvr_workflow_name() == "time_series_agent" and name in {
+                "length",
+                "normalized_mse",
+                "change_point",
+                "season_trend",
+            }:
+                built.append(dict(config))
             else:
                 raise ValueError(f"Unknown rlvr reward '{name}'")
         return built
@@ -472,10 +556,27 @@ class Experiment:
             training_config=training_config,
             model_config=model_config,
             config_overrides=verl_config_overrides,
+            workflow_config=dict(self.recipe.rollout.get("workflow", {}) or {}),
             python_executable=python_executable,
             verl_module=verl_module,
             execute=execute,
         )
+
+    def _rlvr_workflow_name(self) -> str:
+        workflow = self.recipe.rollout.get("workflow", {}) or {}
+        return str(workflow.get("name", "single_turn")).lower()
+
+    def _timestamp_strings(self, timestamps) -> list[str]:
+        return [self._format_timestamp(timestamp) for timestamp in timestamps]
+
+    def _format_timestamp_value_series(self, timestamps, values) -> str:
+        lines = []
+        for timestamp, value in zip(timestamps, values):
+            lines.append(f"{self._format_timestamp(timestamp)} {float(value):.3f}")
+        return "\n".join(lines)
+
+    def _format_timestamp(self, timestamp) -> str:
+        return str(timestamp).split("+", 1)[0].replace("T", " ")[:19]
 
     def _format_future_known(self, sample) -> str:
         assert sample.future_known_window is not None

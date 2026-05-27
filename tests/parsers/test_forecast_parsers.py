@@ -58,6 +58,28 @@ class ForecastParserTests(unittest.TestCase):
         self.assertFalse(result.fallback_used)
         np.testing.assert_allclose(result.point_forecast, np.array([[1.0], [2.5], [3.0]]))
 
+    def test_timestamp_value_parser_ignores_timestamp_numbers(self):
+        from castfactory.parsers import ParseContext, TimestampValueForecastParser
+
+        parser = TimestampValueForecastParser()
+        result = parser.parse(
+            "<think>\nreason\n</think>\n"
+            "<answer>\n"
+            "2022-01-01 02:00:00 3.500\n"
+            "2022-01-01 03:00:00 4.500\n"
+            "</answer>",
+            ParseContext(
+                prediction_length=2,
+                num_channels=1,
+                output_schema="timestamp_value",
+                channel_names=["OT"],
+            ),
+        )
+
+        self.assertTrue(result.success)
+        self.assertFalse(result.fallback_used)
+        np.testing.assert_allclose(result.point_forecast, np.array([[3.5], [4.5]]))
+
     def test_think_answer_parser_falls_back_when_answer_block_is_missing(self):
         from castfactory.parsers import ParseContext, ThinkAnswerForecastParser
 

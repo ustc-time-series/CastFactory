@@ -280,6 +280,77 @@ class VerlBackendTests(unittest.TestCase):
         self.assertEqual(exported["extra_info"]["prediction_length"], 1)
         self.assertEqual(exported["extra_info"]["channel_names"], ["OT"])
 
+    def test_verl_backend_exports_agentic_rows_and_configures_agent_loop(self):
+        from castfactory.training import RLVRDataset
+        from castfactory.training.backends import VerlBackend
+
+        raw_prompt = [{"role": "user", "content": "2022-01-01 00:00:00 1.000"}]
+        dataset = RLVRDataset(
+            [
+                {
+                    "prompt": raw_prompt,
+                    "agent_name": "time_series_forecast_agent",
+                    "reward_model": {
+                        "style": "rule",
+                        "ground_truth": "2022-01-01 01:00:00 2.000",
+                    },
+                    "label": [[2.0]],
+                    "prediction_length": 1,
+                    "channel_names": ["OT"],
+                    "observed_values": [[1.0]],
+                    "cutoff_time": "2022-01-01 00:00:00",
+                    "sample_id": "row-1",
+                    "extra_info": {
+                        "index": "row-1",
+                        "prediction_length": 1,
+                        "channel_names": ["OT"],
+                    },
+                }
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            backend = VerlBackend(
+                run_dir=tmp_path,
+                workflow_config={
+                    "name": "time_series_agent",
+                    "max_steps": 3,
+                    "max_parallel_calls": 2,
+                    "tool_parser_format": "hermes",
+                    "model_service_url": "http://localhost:8994",
+                    "prediction_models": ["chronos2", "arima"],
+                    "local_fallback": "arima_then_last_value",
+                },
+            )
+
+            result = backend.fit(dataset, rewards=[])
+            exported = json.loads(
+                (tmp_path / "rlvr" / "rollout_dataset.jsonl").read_text(encoding="utf-8").splitlines()[0]
+            )
+            config = yaml.safe_load((tmp_path / "rlvr" / "verl_config.yaml").read_text(encoding="utf-8"))
+            agent_loop_config = yaml.safe_load(
+                (tmp_path / "rlvr" / "agent_loop_config.yaml").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(exported["prompt"], raw_prompt)
+        self.assertEqual(exported["agent_name"], "time_series_forecast_agent")
+        self.assertEqual(exported["reward_model"]["ground_truth"], "2022-01-01 01:00:00 2.000")
+        self.assertEqual(exported["extra_info"]["prediction_length"], 1)
+        self.assertEqual(config["data"]["return_raw_chat"], True)
+        self.assertEqual(config["actor_rollout_ref"]["rollout"]["multi_turn"]["enable"], True)
+        self.assertEqual(
+            config["actor_rollout_ref"]["rollout"]["multi_turn"]["format"],
+            "hermes",
+        )
+        self.assertEqual(
+            config["actor_rollout_ref"]["rollout"]["agent"]["default_agent_loop"],
+            "time_series_forecast_agent",
+        )
+        self.assertTrue(config["actor_rollout_ref"]["rollout"]["agent"]["agent_loop_config_path"].endswith("agent_loop_config.yaml"))
+        self.assertEqual(agent_loop_config[0]["name"], "time_series_forecast_agent")
+        self.assertEqual(agent_loop_config[0]["max_steps"], 3)
+        self.assertEqual(result["agent_loop_config_path"], str(tmp_path / "rlvr" / "agent_loop_config.yaml"))
+
     def test_verl_reward_adapter_compute_score_uses_verl_signature(self):
         from castfactory.training.verl_reward_adapter import compute_score
 
@@ -378,6 +449,134 @@ class VerlBackendTests(unittest.TestCase):
 
         self.assertEqual(set(valid), set(invalid))
         self.assertEqual(invalid["mse"], -1.0)
+
+    def test_verl_reward_adapter_scores_timestamp_value_agentic_answer(self):
+        from castfactory.training.verl_reward_adapter import compute_score
+
+        result = compute_score(
+            data_source="castfactory_agentic_rlvr",
+            solution_str=(
+                "<think>\nrefine model forecast\n</think>\n"
+                "<answer>\n"
+                "2022-01-01 02:00:00 3.000\n"
+                "2022-01-01 03:00:00 4.000\n"
+                "</answer>"
+            ),
+            ground_truth="2022-01-01 02:00:00 3.000\n2022-01-01 03:00:00 4.000",
+            extra_info={
+                "prediction_length": 2,
+                "channel_names": ["OT"],
+                "observed_values": [[1.0], [2.0]],
+                "observed_timestamps": [
+                    "2022-01-01 00:00:00",
+                    "2022-01-01 01:00:00",
+                ],
+                "workflow_valid": True,
+                "prediction_called": True,
+                "feature_analysis_called": True,
+            },
+            reward_specs=[
+                {"name": "format", "prediction_length": 2, "num_channels": 1},
+                {"name": "length"},
+                {"name": "normalized_mse"},
+                {"name": "change_point"},
+                {"name": "season_trend"},
+            ],
+        )
+
+        self.assertEqual(result["parse_success"], True)
+        self.assertEqual(result["format"], 1.0)
+        self.assertEqual(result["length"], 0.1)
+        self.assertGreater(result["normalized_mse"], 0.59)
+        self.assertIn("change_point", result)
+        self.assertIn("season_trend", result)
+
+    def test_verl_reward_adapter_applies_agentic_workflow_penalty(self):
+        from castfactory.training.verl_reward_adapter import compute_score
+
+        result = compute_score(
+            data_source="castfactory_agentic_rlvr",
+            solution_str="<think>skip tools</think><answer>\n2022-01-01 02:00:00 3.000\n</answer>",
+            ground_truth="2022-01-01 02:00:00 3.000",
+            extra_info={
+                "prediction_length": 1,
+                "channel_names": ["OT"],
+                "observed_values": [[1.0], [2.0]],
+                "workflow_valid": False,
+                "workflow_penalty": -0.5,
+                "workflow_violation": "predict_time_series was not called",
+            },
+            reward_specs=[
+                {"name": "format", "prediction_length": 1, "num_channels": 1},
+                {"name": "normalized_mse"},
+            ],
+        )
+
+        self.assertEqual(result["score"], -0.5)
+        self.assertEqual(result["workflow_valid"], False)
+        for value in result.values():
+            self.assertIsInstance(value, (bool, int, float))
+
+    def test_verl_reward_adapter_returns_agentic_keys_in_stable_order(self):
+        from castfactory.training.verl_reward_adapter import compute_score
+
+        reward_specs = [
+            {"name": "format", "prediction_length": 2, "num_channels": 1},
+            {"name": "length"},
+            {"name": "normalized_mse"},
+            {"name": "change_point"},
+            {"name": "season_trend"},
+        ]
+        payload = {
+            "data_source": "castfactory_agentic_rlvr",
+            "ground_truth": "2022-01-01 02:00:00 3.000\n2022-01-01 03:00:00 4.000",
+            "reward_specs": reward_specs,
+            "extra_info": {
+                "prediction_length": 2,
+                "channel_names": ["OT"],
+                "observed_values": [[1.0], [2.0]],
+                "observed_timestamps": [
+                    "2022-01-01 00:00:00",
+                    "2022-01-01 01:00:00",
+                ],
+                "workflow_valid": True,
+            },
+        }
+
+        valid = compute_score(
+            solution_str=(
+                "<think>\nrefine model forecast\n</think>\n"
+                "<answer>\n"
+                "2022-01-01 02:00:00 3.000\n"
+                "2022-01-01 03:00:00 4.000\n"
+                "</answer>"
+            ),
+            **payload,
+        )
+        workflow_penalty = compute_score(
+            solution_str="<think>skip tools</think><answer>\n2022-01-01 02:00:00 3.000\n</answer>",
+            **{
+                **payload,
+                "extra_info": {
+                    **payload["extra_info"],
+                    "workflow_valid": False,
+                    "workflow_penalty": -0.5,
+                },
+            },
+        )
+        copied_timestamp = compute_score(
+            solution_str=(
+                "<think>\ncopy observed timestamp\n</think>\n"
+                "<answer>\n"
+                "2022-01-01 00:00:00 3.000\n"
+                "2022-01-01 03:00:00 4.000\n"
+                "</answer>"
+            ),
+            **payload,
+        )
+
+        self.assertEqual(list(valid), list(workflow_penalty))
+        self.assertEqual(list(valid), list(copied_timestamp))
 
     def test_verl_reward_adapter_short_circuits_when_format_is_invalid(self):
         from castfactory.rewards import FormatReward, MSEReward

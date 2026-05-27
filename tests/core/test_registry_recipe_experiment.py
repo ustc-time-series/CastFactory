@@ -100,10 +100,28 @@ data:
 
         self.assertEqual(recipe.rollout["workflow"]["name"], "single_turn")
 
-    def test_recipe_rejects_non_single_turn_rlvr_workflow(self):
+    def test_recipe_allows_time_series_agent_rollout_workflow(self):
         from castfactory.core.recipe import RecipeConfig
 
-        with self.assertRaisesRegex(ValueError, "only supports single_turn"):
+        recipe = RecipeConfig.from_mapping(
+            {
+                "experiment": {"name": "agentic", "stage": "rlvr"},
+                "rollout": {
+                    "workflow": {
+                        "name": "time_series_agent",
+                        "max_steps": 3,
+                    }
+                },
+            }
+        )
+
+        self.assertEqual(recipe.rollout["workflow"]["name"], "time_series_agent")
+        self.assertEqual(recipe.rollout["workflow"]["max_steps"], 3)
+
+    def test_recipe_rejects_unknown_rlvr_workflow(self):
+        from castfactory.core.recipe import RecipeConfig
+
+        with self.assertRaisesRegex(ValueError, "Unknown RLVR rollout workflow"):
             RecipeConfig.from_mapping(
                 {
                     "experiment": {"name": "multiturn", "stage": "rlvr"},
@@ -1145,6 +1163,98 @@ trace:
         self.assertNotIn("workflow", row)
         self.assertIn("| timestamp | OT |", row["model_input_text"])
         self.assertIn("Forecast 1", row["instruction"])
+
+    def test_experiment_agentic_rlvr_rows_export_raw_chat_and_ground_truth_string(self):
+        import numpy as np
+        import pandas as pd
+
+        from castfactory import Experiment
+        from castfactory.data.records import ForecastSample, TSRecord
+
+        observed = TSRecord(
+            values=np.array([[1.0], [2.0]]),
+            timestamps=pd.date_range("2022-01-01", periods=2, freq="h"),
+            channel_names=["OT"],
+            target_channels=["OT"],
+            covariate_channels=[],
+            static_context={"dataset_name": "ToySet", "attr_meaning": "load"},
+            metadata={},
+        )
+        future = TSRecord(
+            values=np.array([[3.0], [4.0]]),
+            timestamps=pd.date_range("2022-01-01 02:00", periods=2, freq="h"),
+            channel_names=["OT"],
+            target_channels=["OT"],
+            covariate_channels=[],
+            static_context={},
+            metadata={},
+        )
+        sample = ForecastSample(
+            observed_window=observed,
+            future_known_window=None,
+            future_unknown_window=future,
+            cutoff_time=observed.timestamps[-1],
+            prediction_length=2,
+            metadata={"sample_id": "row-1"},
+        )
+        experiment = Experiment.from_mapping(
+            {
+                "experiment": {"name": "agentic_rows", "stage": "rlvr"},
+                "rollout": {"workflow": {"name": "time_series_agent"}},
+            }
+        )
+
+        row = experiment._build_rlvr_rows([sample])[0]
+
+        self.assertEqual(row["agent_name"], "time_series_forecast_agent")
+        self.assertIsInstance(row["prompt"], list)
+        self.assertEqual(row["prompt"][0]["role"], "user")
+        self.assertIn("2022-01-01 00:00:00 1.000", row["prompt"][0]["content"])
+        self.assertEqual(row["reward_model"]["style"], "rule")
+        self.assertIn("2022-01-01 02:00:00 3.000", row["reward_model"]["ground_truth"])
+        self.assertEqual(row["extra_info"]["prediction_length"], 2)
+        self.assertEqual(row["extra_info"]["channel_names"], ["OT"])
+        self.assertEqual(row["extra_info"]["label"], [[3.0], [4.0]])
+
+    def test_experiment_agentic_rlvr_rejects_multichannel_samples(self):
+        import numpy as np
+        import pandas as pd
+
+        from castfactory import Experiment
+        from castfactory.data.records import ForecastSample, TSRecord
+
+        observed = TSRecord(
+            values=np.array([[1.0, 10.0], [2.0, 20.0]]),
+            timestamps=pd.date_range("2022-01-01", periods=2, freq="h"),
+            channel_names=["OT", "HUFL"],
+            target_channels=["OT", "HUFL"],
+            covariate_channels=[],
+            metadata={},
+        )
+        future = TSRecord(
+            values=np.array([[3.0, 30.0]]),
+            timestamps=pd.date_range("2022-01-01 02:00", periods=1, freq="h"),
+            channel_names=["OT", "HUFL"],
+            target_channels=["OT", "HUFL"],
+            covariate_channels=[],
+            metadata={},
+        )
+        sample = ForecastSample(
+            observed_window=observed,
+            future_known_window=None,
+            future_unknown_window=future,
+            cutoff_time=observed.timestamps[-1],
+            prediction_length=1,
+        )
+        experiment = Experiment.from_mapping(
+            {
+                "experiment": {"name": "agentic_multichannel", "stage": "rlvr"},
+                "rollout": {"workflow": {"name": "time_series_agent"}},
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "time_series_agent.*univariate"):
+            experiment._build_rlvr_rows([sample])
 
 
 if __name__ == "__main__":

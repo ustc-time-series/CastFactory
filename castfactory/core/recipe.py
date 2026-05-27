@@ -44,11 +44,13 @@ class RecipeConfig:
         workflow = self.rollout.get("workflow")
         if stage == "rlvr" and workflow:
             workflow_name = str(workflow.get("name", "single_turn")).lower()
-            if workflow_name != "single_turn":
+            supported_workflows = {"single_turn", "time_series_agent"}
+            if workflow_name not in supported_workflows:
                 raise ValueError(
-                    "RLVR currently only supports single_turn rollout workflow; "
-                    f"got '{workflow_name}'"
+                    "Unknown RLVR rollout workflow "
+                    f"'{workflow_name}'. Available workflows: single_turn, time_series_agent"
                 )
+            workflow["name"] = workflow_name
 
     @classmethod
     def from_file(cls, path: str | Path) -> "RecipeConfig":
