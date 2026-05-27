@@ -1,13 +1,13 @@
-<h1 align="center"> CastFactory: Towards a Large Language Model Training Framework for Time Series Forecasting </h1>
-
+<h1 align="center">
+  <img src="./image/logo.png" alt="CastFactory" height="40" />
+  : Towards a Large Language Model Training Framework for Time Series Forecasting
+</h1>
 
 <p align="center">
   <a href="https://deepwiki.com/ustc-time-series/CastFactory"><img src="https://devin.ai/assets/deepwiki-badge.png" alt="Ask DeepWiki.com" height="20"/></a>
   <a href="https://github.com/ustc-time-series/CastFactory/stargazers"><img src="https://img.shields.io/github/stars/ustc-time-series/CastFactory" alt="GitHub Repo stars"></a>
   <a href="https://github.com/ustc-time-series/CastFactory/network/members"><img src="https://img.shields.io/github/forks/ustc-time-series/CastFactory" alt="GitHub forks"></a>
 </p>
-
-<p align="center"><img src="./image/logo.png" width="600px" alt="CastFactory Logo" /></p>
 
 ## News
 
