@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 import numpy as np
 
+from castfactory.data.records import ForecastResult
 from castfactory.data.readers import CSVReader
 from castfactory.data.leakage import LeakageChecker
 from castfactory.data.splits import RatioSplitter, TimestampSplitter
@@ -16,10 +17,16 @@ from castfactory.evaluation.protocols import RollingEvaluator, StandardEvaluator
 from castfactory.core.recipe import RecipeConfig
 from castfactory.core.registry import backbones, trainers
 from castfactory.models.adapters import PEFTAdapter
-from castfactory.models.backbones import HFCausalLMBackbone
+from castfactory.models.backbones import HFCausalLMBackbone, OpenAICompatibleBackbone
 from castfactory.models.bridges import TextConcatBridge
 from castfactory.models.heads import TextGenerationHead
-from castfactory.parsers import JSONForecastParser, ParseContext
+from castfactory.parsers import (
+    JSONForecastParser,
+    ParseContext,
+    ThinkAnswerForecastParser,
+    TimestampValueForecastParser,
+    inspect_reasoning_answer_format,
+)
 from castfactory.representation import (
     ContextRepresentation,
     DiscreteTokenRepresentation,
@@ -678,6 +685,8 @@ class Experiment:
         name = backbone_config.pop("name", "hf_causal_lm")
         if name in {"hf", "hf_causal_lm"}:
             backbone = HFCausalLMBackbone(**backbone_config)
+        elif name in {"vllm_openai", "openai_compatible"}:
+            backbone = OpenAICompatibleBackbone(**backbone_config)
         else:
             backbone = backbones.build({"name": name, **backbone_config})
         if hasattr(backbone, "load"):
@@ -688,7 +697,7 @@ class Experiment:
         raw_backbone_config = self.recipe.model.get("backbone", {}) if self.recipe.model else {}
         backbone_config = dict(raw_backbone_config or {})
         init_checkpoint = self.recipe.training.get("init_checkpoint")
-        if init_checkpoint:
+        if init_checkpoint and not self._is_service_backbone_config(backbone_config):
             init_checkpoint_text = str(init_checkpoint)
             checkpoint_path = Path(init_checkpoint_text).expanduser()
             if self._is_explicit_local_path(init_checkpoint_text) and not checkpoint_path.exists():
@@ -715,6 +724,10 @@ class Experiment:
                     "local_files_only": True,
                 }
         return backbone_config
+
+    def _is_service_backbone_config(self, backbone_config: dict) -> bool:
+        name = str(backbone_config.get("name", "")).strip().lower()
+        return name in {"vllm_openai", "openai_compatible"}
 
     def _is_explicit_local_path(self, value: str) -> bool:
         path = Path(value).expanduser()
@@ -753,39 +766,102 @@ class Experiment:
             )
             return self._last_value_predictor
         representation = self._build_representation()
-        bridge = TextConcatBridge(
-            system_prompt=self.recipe.inference.get("system_prompt", "")
-        )
-        parser = JSONForecastParser()
-        head = TextGenerationHead(parser=parser)
+        parser = self._build_evaluation_parser()
 
         def predictor(samples):
             results = []
             for sample in samples:
-                instruction = (
-                    f"Predict the next {sample.prediction_length} steps. "
-                    'Return JSON: {"forecast": [...]}'
-                )
-                model_input = representation.encode(sample)
-                prompt = bridge.build_prompt(model_input, instruction)
+                prompt = self._build_evaluation_prompt(sample, representation)
                 context = ParseContext(
                     prediction_length=sample.prediction_length,
                     num_channels=sample.future_unknown_window.num_channels,
-                    output_schema="forecast_json_v1",
+                    output_schema=self._evaluation_output_schema(parser),
                     channel_names=list(sample.future_unknown_window.channel_names),
                     observed_values=sample.observed_window.values,
                 )
+                raw_response = backbone.generate_text(prompt, **self._generation_kwargs())
+                parsed = parser.parse(raw_response, context)
+                structure_checks = self._evaluation_structure_checks(parser, raw_response)
+                format_reward = FormatReward(
+                    prediction_length=sample.prediction_length,
+                    num_channels=sample.future_unknown_window.num_channels,
+                ).compute(parsed, structure_checks=structure_checks)
+                metadata = {
+                    "parse_error": parsed.parse_error,
+                    "fallback_strategy": parsed.fallback_strategy,
+                    "format_valid": bool(format_reward.value == 1.0),
+                    "format_score": float(format_reward.value),
+                    **structure_checks,
+                }
                 results.append(
-                    head.generate(
-                        backbone=backbone,
-                        prompt=prompt,
-                        parse_context=context,
-                        **self._generation_kwargs(),
+                    ForecastResult(
+                        point_forecast=parsed.point_forecast,
+                        quantile_forecast=parsed.quantile_forecast,
+                        raw_response=raw_response,
+                        parse_success=parsed.success,
+                        fallback_used=parsed.fallback_used,
+                        metadata=metadata,
                     )
                 )
             return results
 
         return predictor
+
+    def _build_evaluation_prompt(self, sample, representation) -> str:
+        model_input = representation.encode(sample)
+        instruction_template = self._resolve_instruction_template()
+        format_kwargs = build_instruction_format_kwargs(sample, model_input)
+        instruction = instruction_template.format(**format_kwargs)
+        input_parts = [instruction]
+        if model_input.text_prompt and not template_uses_data_lookback(instruction_template):
+            input_parts.append(model_input.text_prompt)
+        if sample.future_known_window is not None:
+            input_parts.append(self._format_future_known(sample))
+        prompt = "\n".join(input_parts)
+        system_prompt = str(self.recipe.inference.get("system_prompt", "")).strip()
+        if system_prompt:
+            return f"{system_prompt}\n\n{prompt}"
+        return prompt
+
+    def _build_evaluation_parser(self):
+        parser_name = str(self.recipe.evaluation.get("parser", "json")).strip().lower()
+        if parser_name in {"json", "forecast_json_v1"}:
+            return JSONForecastParser()
+        if parser_name in {"think_answer", "think_answer_array"}:
+            return ThinkAnswerForecastParser()
+        if parser_name in {"timestamp_value", "timestamp-value"}:
+            return TimestampValueForecastParser()
+        if parser_name == "reward_aligned":
+            output_schema = str(self.recipe.evaluation.get("output_schema", "")).lower()
+            if (
+                self._rlvr_workflow_name() == "time_series_agent"
+                or output_schema == "timestamp_value"
+            ):
+                return TimestampValueForecastParser()
+            if self.recipe.experiment.get("stage") == "rlvr" or self.recipe.training.get("rewards"):
+                return ThinkAnswerForecastParser()
+            return JSONForecastParser()
+        raise ValueError(
+            "Unknown evaluation parser "
+            f"'{parser_name}'. Available parsers: json, reward_aligned, think_answer, "
+            "timestamp_value"
+        )
+
+    def _evaluation_output_schema(self, parser) -> str:
+        if isinstance(parser, TimestampValueForecastParser):
+            return "timestamp_value"
+        if isinstance(parser, ThinkAnswerForecastParser):
+            return "think_answer_array"
+        return "forecast_json_v1"
+
+    def _evaluation_structure_checks(self, parser, raw_response: str) -> dict:
+        if isinstance(parser, (ThinkAnswerForecastParser, TimestampValueForecastParser)):
+            format_info = inspect_reasoning_answer_format(raw_response)
+            return {
+                "has_think_block": bool(format_info["has_think_block"]),
+                "has_answer_block": bool(format_info["has_answer_block"]),
+            }
+        return {}
 
     def _generation_kwargs(self) -> dict:
         prompt_only_keys = {"system_prompt"}

@@ -70,17 +70,29 @@ class StandardEvaluator:
 
     def _extract_forecast(self, forecast):
         if isinstance(forecast, ForecastResult):
+            metadata = dict(forecast.metadata)
             return (
                 np.asarray(forecast.point_forecast, dtype=float),
                 {
                     "parse_success": forecast.parse_success,
                     "fallback_used": forecast.fallback_used,
                     "raw_response": forecast.raw_response,
+                    "format_valid": metadata.get(
+                        "format_valid",
+                        bool(forecast.parse_success and not forecast.fallback_used),
+                    ),
+                    "parse_error": metadata.get("parse_error", ""),
                 },
             )
         return (
             np.asarray(forecast, dtype=float),
-            {"parse_success": True, "fallback_used": False, "raw_response": ""},
+            {
+                "parse_success": True,
+                "fallback_used": False,
+                "raw_response": "",
+                "format_valid": True,
+                "parse_error": "",
+            },
         )
 
     def _compute_metrics(self, pred, target, insample, rows) -> dict:
@@ -112,6 +124,8 @@ class StandardEvaluator:
                             ),
                             "parse_success": bool(trace["parse_success"]),
                             "fallback_used": bool(trace["fallback_used"]),
+                            "format_valid": bool(trace.get("format_valid", False)),
+                            "parse_error": trace.get("parse_error", ""),
                             "raw_response": trace["raw_response"],
                         }
                     )

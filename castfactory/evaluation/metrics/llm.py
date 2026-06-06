@@ -15,6 +15,9 @@ def format_valid_rate(rows: Iterable[Mapping]) -> float:
     row_list = list(rows)
     if not row_list:
         return 0.0
+    if any("format_valid" in row for row in row_list):
+        valid = sum(1 for row in row_list if bool(row.get("format_valid", False)))
+        return valid / len(row_list)
     valid = sum(
         1
         for row in row_list
